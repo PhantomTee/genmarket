@@ -64,7 +64,12 @@ export default function PaymentModal({ listingId, price, ipfsCid, onClose }: Pro
       const plainBuffer = dtb(encryptedSource, encryption_key_base64);
 
       // 3. Build a blob URL for download
-      const blob = new Blob([plainBuffer], { type: 'text/x-python' });
+const arrayBuffer = plainBuffer.buffer.slice(
+  plainBuffer.byteOffset,
+  plainBuffer.byteOffset + plainBuffer.byteLength
+) as ArrayBuffer;
+
+const blob = new Blob([arrayBuffer], { type: "text/x-python" });
       setDownloadUrl(URL.createObjectURL(blob));
 
       // 4. Buyer calls confirm_purchase on-chain (releases funds to seller)
