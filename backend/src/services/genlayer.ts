@@ -2,9 +2,9 @@ import axios from 'axios';
 import { privateKeyToAccount } from 'viem/accounts';
 
 // ---------------------------------------------------------------------------
-// NOTE: genlayer-js is ESM-only. Static `import` from a CJS module would
-// compile to `require()` which Node cannot use on an ESM package. We use
-// dynamic import() instead — it stays as an async import call, not require().
+// NOTE: genlayer-js is ESM-only. We use dynamic import() throughout so our
+// CJS module can load it at runtime without static require() calls.
+// Node.js caches dynamic imports, so repeated calls are instant after first load.
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -46,7 +46,82 @@ export interface Escrow {
 }
 
 // ---------------------------------------------------------------------------
-// JSON-RPC transport (read-only — view methods only)
+// Contract addresses
+// ---------------------------------------------------------------------------
+
+function marketplaceAddress(): string {
+  const addr = process.env.MARKETPLACE_CONTRACT_ADDRESS;
+  if (!addr) throw new Error('MARKETPLACE_CONTRACT_ADDRESS is not set');
+  return addr;
+}
+
+function judgeAddress(): string {
+  const addr = process.env.JUDGE_CONTRACT_ADDRESS;
+  if (!addr) throw new Error('JUDGE_CONTRACT_ADDRESS is not set');
+  return addr;
+}
+
+// ---------------------------------------------------------------------------
+// Read client (memoised — created once, reused for all view calls)
+// Uses an ephemeral random account; reads don't require signing.
+// ---------------------------------------------------------------------------
+
+let _readClient: any = null;
+
+async function getReadClient() {
+  if (_readClient) return _readClient;
+  const [{ createClient, createAccount }, { studionet }] = await Promise.all([
+    import('genlayer-js'),
+    import('genlayer-js/chains'),
+  ]);
+  const account = createAccount();
+  _readClient = createClient({ chain: studionet, account });
+  return _readClient;
+}
+
+// ---------------------------------------------------------------------------
+// Marketplace — view reads via SDK (SDK handles encoding internally)
+// ---------------------------------------------------------------------------
+
+export async function getAllListings(): Promise<Listing[]> {
+  const client = await getReadClient();
+  return client.readContract({
+    address: marketplaceAddress() as `0x${string}`,
+    functionName: 'get_all_listings',
+    args: [],
+  });
+}
+
+export async function getListing(listingId: string): Promise<Listing> {
+  const client = await getReadClient();
+  return client.readContract({
+    address: marketplaceAddress() as `0x${string}`,
+    functionName: 'get_listing',
+    args: [listingId],
+  });
+}
+
+export async function getListingsBySeller(seller: string): Promise<Listing[]> {
+  const client = await getReadClient();
+  return client.readContract({
+    address: marketplaceAddress() as `0x${string}`,
+    functionName: 'get_listings_by_seller',
+    args: [seller],
+  });
+}
+
+export async function getEscrow(escrowId: string): Promise<Escrow> {
+  const client = await getReadClient();
+  return client.readContract({
+    address: marketplaceAddress() as `0x${string}`,
+    functionName: 'get_escrow',
+    args: [escrowId],
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Generic contract introspection — ContractPlayground
+// (gen_getContractSchema doesn't have an SDK wrapper; use raw RPC for this)
 // ---------------------------------------------------------------------------
 
 let _rpcId = 1;
@@ -69,63 +144,6 @@ async function rpc<T>(method: string, params: unknown[]): Promise<T> {
   return res.data.result;
 }
 
-async function readContract<T>(
-  to: string,
-  functionName: string,
-  args: unknown[] = []
-): Promise<T> {
-  // data must be a hex-encoded string (0x + hex bytes of the JSON payload)
-  const jsonPayload = JSON.stringify({ method: functionName, args });
-  const hexData = '0x' + Buffer.from(jsonPayload, 'utf8').toString('hex');
-  return rpc<T>('gen_call', [{
-    from: '0x0000000000000000000000000000000000000000',
-    to,
-    data: hexData,
-    type: 'read',
-    status: 'accepted',
-  }]);
-}
-
-// ---------------------------------------------------------------------------
-// Contract addresses
-// ---------------------------------------------------------------------------
-
-function marketplaceAddress(): string {
-  const addr = process.env.MARKETPLACE_CONTRACT_ADDRESS;
-  if (!addr) throw new Error('MARKETPLACE_CONTRACT_ADDRESS is not set');
-  return addr;
-}
-
-function judgeAddress(): string {
-  const addr = process.env.JUDGE_CONTRACT_ADDRESS;
-  if (!addr) throw new Error('JUDGE_CONTRACT_ADDRESS is not set');
-  return addr;
-}
-
-// ---------------------------------------------------------------------------
-// Marketplace — view reads
-// ---------------------------------------------------------------------------
-
-export async function getAllListings(): Promise<Listing[]> {
-  return readContract<Listing[]>(marketplaceAddress(), 'get_all_listings');
-}
-
-export async function getListing(listingId: string): Promise<Listing> {
-  return readContract<Listing>(marketplaceAddress(), 'get_listing', [listingId]);
-}
-
-export async function getListingsBySeller(seller: string): Promise<Listing[]> {
-  return readContract<Listing[]>(marketplaceAddress(), 'get_listings_by_seller', [seller]);
-}
-
-export async function getEscrow(escrowId: string): Promise<Escrow> {
-  return readContract<Escrow>(marketplaceAddress(), 'get_escrow', [escrowId]);
-}
-
-// ---------------------------------------------------------------------------
-// Generic contract introspection — ContractPlayground
-// ---------------------------------------------------------------------------
-
 export async function getContractABI(address: string): Promise<ABI> {
   return rpc<ABI>('gen_getContractSchema', [address, 'latest']);
 }
@@ -135,7 +153,12 @@ export async function callContractMethod(
   functionName: string,
   args: unknown[]
 ): Promise<unknown> {
-  return readContract<unknown>(address, functionName, args);
+  const client = await getReadClient();
+  return client.readContract({
+    address: address as `0x${string}`,
+    functionName,
+    args,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -146,12 +169,9 @@ export async function callContractMethod(
 // The backend signs the tx with BACKEND_PRIVATE_KEY, waits for FINALIZED,
 // then extracts the verdict string from the transaction messages.
 // Plaintext source_code is passed here and discarded by the caller immediately.
-//
-// genlayer-js is ESM-only, so we use dynamic import() to load it at runtime
-// from our CJS module (dynamic import works across the CJS/ESM boundary).
 // ---------------------------------------------------------------------------
 
-async function getServiceClient() {
+async function getWriteClient() {
   const [{ createClient }, { studionet }] = await Promise.all([
     import('genlayer-js'),
     import('genlayer-js/chains'),
@@ -161,10 +181,7 @@ async function getServiceClient() {
   if (!pk) throw new Error('BACKEND_PRIVATE_KEY is not set');
   const account = privateKeyToAccount(pk as `0x${string}`);
 
-  return createClient({
-    chain: studionet,
-    account,
-  });
+  return createClient({ chain: studionet, account });
 }
 
 export async function evaluateCode(
@@ -173,7 +190,7 @@ export async function evaluateCode(
   buyerRequirement: string
 ): Promise<string> {
   const { TransactionStatus, ExecutionResult } = await import('genlayer-js/types');
-  const client = await getServiceClient();
+  const client = await getWriteClient();
 
   const txHash = await client.writeContract({
     address: judgeAddress() as `0x${string}`,
@@ -194,7 +211,6 @@ export async function evaluateCode(
   }
 
   // GenLayer returns the write method's return value in the transaction messages.
-  // The return message is the last message with a non-null value field.
   const tx = await client.getTransaction({ hash: txHash });
   const messages: Array<{ value?: unknown }> = (tx as any).messages ?? [];
   const returnMsg = [...messages].reverse().find((m) => m.value !== undefined);
@@ -205,7 +221,6 @@ export async function evaluateCode(
       : JSON.stringify(returnMsg.value);
   }
 
-  // Fallback: some SDK versions surface it directly on the receipt
   const fallback = (receipt as any).returnValue ?? (receipt as any).result;
   if (fallback !== undefined) {
     return typeof fallback === 'string' ? fallback : JSON.stringify(fallback);
