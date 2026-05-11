@@ -74,11 +74,13 @@ async function readContract<T>(
   functionName: string,
   args: unknown[] = []
 ): Promise<T> {
-  // data must be a JSON string — GenLayer validates it as str, not object
+  // data must be a hex-encoded string (0x + hex bytes of the JSON payload)
+  const jsonPayload = JSON.stringify({ method: functionName, args });
+  const hexData = '0x' + Buffer.from(jsonPayload, 'utf8').toString('hex');
   return rpc<T>('gen_call', [{
     from: '0x0000000000000000000000000000000000000000',
     to,
-    data: JSON.stringify({ method: functionName, args }),
+    data: hexData,
     type: 'read',
     status: 'accepted',
   }]);
