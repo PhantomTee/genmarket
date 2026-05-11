@@ -74,10 +74,11 @@ async function readContract<T>(
   functionName: string,
   args: unknown[] = []
 ): Promise<T> {
+  // data must be a JSON string — GenLayer validates it as str, not object
   return rpc<T>('gen_call', [{
     from: '0x0000000000000000000000000000000000000000',
     to,
-    data: { method: functionName, args },
+    data: JSON.stringify({ method: functionName, args }),
     type: 'read',
     status: 'accepted',
   }]);
