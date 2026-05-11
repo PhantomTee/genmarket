@@ -66,7 +66,12 @@ export default function DashboardPage() {
     try {
       const encrypted = await fetchFromIPFS(purchase.ipfs_cid);
       const buffer = decryptToBuffer(encrypted, purchase.encryption_key_base64);
-      const blob = new Blob([buffer], { type: 'text/x-python' });
+      const arrayBuffer = buffer.buffer.slice(
+  buffer.byteOffset,
+  buffer.byteOffset + buffer.byteLength
+) as ArrayBuffer;
+
+const blob = new Blob([arrayBuffer], { type: "text/x-python" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
