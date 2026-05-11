@@ -104,7 +104,7 @@ async function writeAndWait(
   const txHash = await writeClient.writeContract({
     address: params.address,
     functionName: params.functionName,
-    args: params.args,
+    args: params.args as any[],
     value: params.value ?? 0n,
   });
 
@@ -272,3 +272,4 @@ export async function callContractMethod(
     args,
   });
 }
+
