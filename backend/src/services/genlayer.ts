@@ -74,8 +74,13 @@ async function readContract<T>(
   functionName: string,
   args: unknown[] = []
 ): Promise<T> {
-  // gen_call takes a single call object — no block-tag parameter
-  return rpc<T>('gen_call', [{ to, data: { method: functionName, args } }]);
+  return rpc<T>('gen_call', [{
+    from: '0x0000000000000000000000000000000000000000',
+    to,
+    data: { method: functionName, args },
+    type: 'read',
+    status: 'accepted',
+  }]);
 }
 
 // ---------------------------------------------------------------------------

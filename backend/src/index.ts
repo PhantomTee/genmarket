@@ -1,5 +1,13 @@
 import 'dotenv/config';
 import express from 'express';
+
+// Keep the process alive on unhandled rejections — log and continue
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err.message);
+});
 import cors from 'cors';
 import { initDb } from './db/schema';
 import listingsRouter from './routes/listings';
