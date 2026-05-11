@@ -1,0 +1,274 @@
+import { createClient } from 'genlayer-js';
+import { studionet } from 'genlayer-js/chains';
+import { TransactionStatus, ExecutionResult } from 'genlayer-js/types';
+
+// ---------------------------------------------------------------------------
+// Types mirroring Marketplace.py state
+// ---------------------------------------------------------------------------
+
+export interface Listing {
+  id: string;
+  seller: string;
+  title: string;
+  description: string;
+  price: number;        // wei — native GEN token
+  category: string;
+  demo_contract_address: string;
+  ipfs_cid: string;
+  status: 'active' | 'pending' | 'sold' | 'removed';
+}
+
+export interface Escrow {
+  id: string;
+  buyer: string;
+  listing_id: string;
+  amount: number;       // wei
+  status: 'locked' | 'released' | 'refunded';
+}
+
+export interface ABIParam {
+  name: string;
+  type: string;
+}
+
+export interface ABIMethod {
+  name: string;
+  inputs: ABIParam[];
+  outputs: ABIParam[];
+  readonly: boolean;
+}
+
+export type ABI = ABIMethod[];
+
+// ---------------------------------------------------------------------------
+// Contract addresses (set NEXT_PUBLIC_ vars in .env.local)
+// ---------------------------------------------------------------------------
+
+function marketplaceAddress(): `0x${string}` {
+  const addr = process.env.NEXT_PUBLIC_MARKETPLACE_CONTRACT_ADDRESS;
+  if (!addr) throw new Error('NEXT_PUBLIC_MARKETPLACE_CONTRACT_ADDRESS is not set');
+  return addr as `0x${string}`;
+}
+
+// ---------------------------------------------------------------------------
+// Read client — no wallet needed
+// ---------------------------------------------------------------------------
+
+export function createReadClient() {
+  return createClient({ chain: studionet });
+}
+
+// ---------------------------------------------------------------------------
+// Wallet connection — returns address + a write-capable client
+// ---------------------------------------------------------------------------
+
+export async function connectWallet(): Promise<{
+  address: `0x${string}`;
+  writeClient: ReturnType<typeof createClient>;
+}> {
+  if (typeof window === 'undefined' || !window.ethereum) {
+    throw new Error('No wallet detected. Install MetaMask or a compatible wallet.');
+  }
+
+  const accounts: string[] = await window.ethereum.request({
+    method: 'eth_requestAccounts',
+  });
+
+  const address = accounts[0] as `0x${string}`;
+
+  const writeClient = createClient({
+    chain: studionet,
+    account: address,
+    provider: window.ethereum,
+  });
+
+  // Prompt wallet to add / switch to GenLayer Studionet
+  await writeClient.connect('studionet');
+
+  return { address, writeClient };
+}
+
+// ---------------------------------------------------------------------------
+// Helper — submit write tx and wait for FINALIZED
+// ---------------------------------------------------------------------------
+
+async function writeAndWait(
+  writeClient: ReturnType<typeof createClient>,
+  params: {
+    address: `0x${string}`;
+    functionName: string;
+    args: unknown[];
+    value?: bigint;
+  }
+): Promise<ReturnType<typeof createReadClient>['waitForTransactionReceipt'] extends (...a: any[]) => Promise<infer R> ? R : never> {
+  const txHash = await writeClient.writeContract({
+    address: params.address,
+    functionName: params.functionName,
+    args: params.args,
+    value: params.value ?? 0n,
+  });
+
+  const readClient = createReadClient();
+  const receipt = await readClient.waitForTransactionReceipt({
+    hash: txHash,
+    status: TransactionStatus.FINALIZED,
+    interval: 3_000,
+    retries: 40,
+  });
+
+  if (receipt.txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) {
+    throw new Error(`Transaction failed: ${params.functionName}`);
+  }
+
+  return receipt as any;
+}
+
+// ---------------------------------------------------------------------------
+// Marketplace — write methods (called from user wallet)
+// ---------------------------------------------------------------------------
+
+export async function createListing(
+  writeClient: ReturnType<typeof createClient>,
+  params: {
+    title: string;
+    description: string;
+    price: bigint;
+    category: string;
+    demo_contract_address: string;
+    ipfs_cid: string;
+  }
+): Promise<string> {
+  const receipt = await writeAndWait(writeClient, {
+    address: marketplaceAddress(),
+    functionName: 'create_listing',
+    args: [
+      params.title,
+      params.description,
+      params.price,
+      params.category,
+      params.demo_contract_address,
+      params.ipfs_cid,
+    ],
+  });
+  return (receipt as any).returnValue ?? '';
+}
+
+export async function buy(
+  writeClient: ReturnType<typeof createClient>,
+  listingId: string,
+  priceWei: bigint
+): Promise<string> {
+  const receipt = await writeAndWait(writeClient, {
+    address: marketplaceAddress(),
+    functionName: 'buy',
+    args: [listingId],
+    value: priceWei,
+  });
+  // escrow_id is deterministic: "{listing_id}_{buyer_address}" — also returned by contract
+  return (receipt as any).returnValue ?? '';
+}
+
+export async function confirmPurchase(
+  writeClient: ReturnType<typeof createClient>,
+  escrowId: string
+): Promise<void> {
+  await writeAndWait(writeClient, {
+    address: marketplaceAddress(),
+    functionName: 'confirm_purchase',
+    args: [escrowId],
+  });
+}
+
+export async function refund(
+  writeClient: ReturnType<typeof createClient>,
+  escrowId: string
+): Promise<void> {
+  await writeAndWait(writeClient, {
+    address: marketplaceAddress(),
+    functionName: 'refund',
+    args: [escrowId],
+  });
+}
+
+export async function removeListing(
+  writeClient: ReturnType<typeof createClient>,
+  listingId: string
+): Promise<void> {
+  await writeAndWait(writeClient, {
+    address: marketplaceAddress(),
+    functionName: 'remove_listing',
+    args: [listingId],
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Marketplace — read methods
+// ---------------------------------------------------------------------------
+
+export async function getAllListings(): Promise<Listing[]> {
+  const client = createReadClient();
+  return client.readContract({
+    address: marketplaceAddress(),
+    functionName: 'get_all_listings',
+    args: [],
+  }) as Promise<Listing[]>;
+}
+
+export async function getListing(listingId: string): Promise<Listing> {
+  const client = createReadClient();
+  return client.readContract({
+    address: marketplaceAddress(),
+    functionName: 'get_listing',
+    args: [listingId],
+  }) as Promise<Listing>;
+}
+
+export async function getListingsBySeller(seller: string): Promise<Listing[]> {
+  const client = createReadClient();
+  return client.readContract({
+    address: marketplaceAddress(),
+    functionName: 'get_listings_by_seller',
+    args: [seller],
+  }) as Promise<Listing[]>;
+}
+
+export async function getListingsByCategory(category: string): Promise<Listing[]> {
+  const client = createReadClient();
+  return client.readContract({
+    address: marketplaceAddress(),
+    functionName: 'get_listings_by_category',
+    args: [category],
+  }) as Promise<Listing[]>;
+}
+
+export async function getEscrow(escrowId: string): Promise<Escrow> {
+  const client = createReadClient();
+  return client.readContract({
+    address: marketplaceAddress(),
+    functionName: 'get_escrow',
+    args: [escrowId],
+  }) as Promise<Escrow>;
+}
+
+// ---------------------------------------------------------------------------
+// Generic contract introspection — ContractPlayground
+// ---------------------------------------------------------------------------
+
+export async function getContractABI(address: string): Promise<ABI> {
+  const res = await fetch(`/api/contract-abi?address=${encodeURIComponent(address)}`);
+  if (!res.ok) throw new Error('Failed to fetch contract ABI');
+  return res.json();
+}
+
+export async function callContractMethod(
+  address: string,
+  functionName: string,
+  args: unknown[]
+): Promise<unknown> {
+  const client = createReadClient();
+  return client.readContract({
+    address: address as `0x${string}`,
+    functionName,
+    args,
+  });
+}

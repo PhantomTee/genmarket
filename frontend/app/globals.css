@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #F7F4EF;
+  --foreground: #0D0D0D;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-geist), sans-serif;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+code, pre, .font-mono {
+  font-family: var(--font-geist-mono), monospace;
+}
+
+@layer components {
+  .input {
+    @apply border border-neutral-200 bg-white rounded-xl px-4 py-2.5 text-sm w-full focus:outline-none focus:border-neutral-900 transition-colors;
+  }
+}
