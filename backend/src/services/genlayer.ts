@@ -1,8 +1,11 @@
 import axios from 'axios';
-import { createClient } from 'genlayer-js';
-import { studionet } from 'genlayer-js/chains';
-import { TransactionStatus, ExecutionResult } from 'genlayer-js/types';
 import { privateKeyToAccount } from 'viem/accounts';
+
+// ---------------------------------------------------------------------------
+// NOTE: genlayer-js is ESM-only. Static `import` from a CJS module would
+// compile to `require()` which Node cannot use on an ESM package. We use
+// dynamic import() instead — it stays as an async import call, not require().
+// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -134,12 +137,21 @@ export async function callContractMethod(
 // The backend signs the tx with BACKEND_PRIVATE_KEY, waits for FINALIZED,
 // then extracts the verdict string from the transaction messages.
 // Plaintext source_code is passed here and discarded by the caller immediately.
+//
+// genlayer-js is ESM-only, so we use dynamic import() to load it at runtime
+// from our CJS module (dynamic import works across the CJS/ESM boundary).
 // ---------------------------------------------------------------------------
 
-function getServiceClient() {
+async function getServiceClient() {
+  const [{ createClient }, { studionet }] = await Promise.all([
+    import('genlayer-js'),
+    import('genlayer-js/chains'),
+  ]);
+
   const pk = process.env.BACKEND_PRIVATE_KEY;
   if (!pk) throw new Error('BACKEND_PRIVATE_KEY is not set');
   const account = privateKeyToAccount(pk as `0x${string}`);
+
   return createClient({
     chain: studionet,
     account,
@@ -151,7 +163,8 @@ export async function evaluateCode(
   sellerDescription: string,
   buyerRequirement: string
 ): Promise<string> {
-  const client = getServiceClient();
+  const { TransactionStatus, ExecutionResult } = await import('genlayer-js/types');
+  const client = await getServiceClient();
 
   const txHash = await client.writeContract({
     address: judgeAddress() as `0x${string}`,
