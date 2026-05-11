@@ -79,49 +79,41 @@ async function getReadClient() {
   return _readClient;
 }
 
+// Helper: call a read-only (_json) method and parse the JSON string it returns
+async function readJson<T>(functionName: string, args: unknown[] = []): Promise<T> {
+  const client = await getReadClient();
+  const jsonStr: string = await client.readContract({
+    address: marketplaceAddress() as `0x${string}`,
+    functionName,
+    args,
+  });
+  return JSON.parse(jsonStr) as T;
+}
+
 // ---------------------------------------------------------------------------
-// Marketplace — view reads via SDK (SDK handles encoding internally)
+// Marketplace — view reads
+// Actual on-chain method names all have _json suffix and return JSON strings.
 // ---------------------------------------------------------------------------
 
 export async function getAllListings(): Promise<Listing[]> {
-  const client = await getReadClient();
-  return client.readContract({
-    address: marketplaceAddress() as `0x${string}`,
-    functionName: 'get_all_listings',
-    args: [],
-  });
+  return readJson<Listing[]>('get_all_listings_json');
 }
 
 export async function getListing(listingId: string): Promise<Listing> {
-  const client = await getReadClient();
-  return client.readContract({
-    address: marketplaceAddress() as `0x${string}`,
-    functionName: 'get_listing',
-    args: [listingId],
-  });
+  return readJson<Listing>('get_listing_json', [listingId]);
 }
 
 export async function getListingsBySeller(seller: string): Promise<Listing[]> {
-  const client = await getReadClient();
-  return client.readContract({
-    address: marketplaceAddress() as `0x${string}`,
-    functionName: 'get_listings_by_seller',
-    args: [seller],
-  });
+  return readJson<Listing[]>('get_listings_by_seller_json', [seller]);
 }
 
 export async function getEscrow(escrowId: string): Promise<Escrow> {
-  const client = await getReadClient();
-  return client.readContract({
-    address: marketplaceAddress() as `0x${string}`,
-    functionName: 'get_escrow',
-    args: [escrowId],
-  });
+  return readJson<Escrow>('get_escrow_json', [escrowId]);
 }
 
 // ---------------------------------------------------------------------------
 // Generic contract introspection — ContractPlayground
-// (gen_getContractSchema doesn't have an SDK wrapper; use raw RPC for this)
+// gen_getContractSchema does NOT accept a block param (one arg only).
 // ---------------------------------------------------------------------------
 
 let _rpcId = 1;
@@ -145,7 +137,8 @@ async function rpc<T>(method: string, params: unknown[]): Promise<T> {
 }
 
 export async function getContractABI(address: string): Promise<ABI> {
-  return rpc<ABI>('gen_getContractSchema', [address, 'latest']);
+  // gen_getContractSchema takes only the address — no block tag
+  return rpc<ABI>('gen_getContractSchema', [address]);
 }
 
 export async function callContractMethod(
@@ -154,21 +147,21 @@ export async function callContractMethod(
   args: unknown[]
 ): Promise<unknown> {
   const client = await getReadClient();
-  return client.readContract({
+  // For arbitrary contracts (ContractPlayground), call readContract directly
+  const result: any = await client.readContract({
     address: address as `0x${string}`,
     functionName,
     args,
   });
+  // If the result looks like a JSON string, parse it
+  if (typeof result === 'string') {
+    try { return JSON.parse(result); } catch { /* return as-is */ }
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------------------
 // JudgeContract — write tx via backend service wallet (Option A)
-//
-// evaluate() is @gl.public.write — it uses gl.exec_prompt and
-// gl.eq_principle_prompt_comparative, which require multi-validator consensus.
-// The backend signs the tx with BACKEND_PRIVATE_KEY, waits for FINALIZED,
-// then extracts the verdict string from the transaction messages.
-// Plaintext source_code is passed here and discarded by the caller immediately.
 // ---------------------------------------------------------------------------
 
 async function getWriteClient() {
@@ -210,7 +203,6 @@ export async function evaluateCode(
     throw new Error('JudgeContract evaluation failed during execution');
   }
 
-  // GenLayer returns the write method's return value in the transaction messages.
   const tx = await client.getTransaction({ hash: txHash });
   const messages: Array<{ value?: unknown }> = (tx as any).messages ?? [];
   const returnMsg = [...messages].reverse().find((m) => m.value !== undefined);
