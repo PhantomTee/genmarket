@@ -18,8 +18,10 @@ export default function WalletConnect() {
         <button
           onClick={disconnect}
           className="text-xs text-stone-400 hover:text-stone-700 transition-colors"
+          title="Disconnect wallet"
         >
-          Disconnect
+          <span className="hidden sm:inline">Disconnect</span>
+          <span className="sm:hidden text-base leading-none">×</span>
         </button>
       </div>
     );

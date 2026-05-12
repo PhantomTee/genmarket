@@ -155,7 +155,7 @@ export default function SellPage() {
           GenMarket<span className="text-neutral-400">.</span>
         </Link>
         <div className="flex items-center gap-4">
-          <Link href="/editor" className="text-sm text-neutral-500 hover:text-neutral-900 transition-colors">
+          <Link href="/editor" className="text-sm text-neutral-500 hover:text-neutral-900 transition-colors hidden sm:block">
             ← Editor
           </Link>
           <WalletConnect />

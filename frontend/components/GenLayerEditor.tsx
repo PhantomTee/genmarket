@@ -222,11 +222,11 @@ export default function GenLayerEditor() {
     <div className="flex flex-col h-screen bg-neutral-900">
       {/* Toolbar */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-neutral-700 bg-neutral-900 shrink-0">
-        <div className="flex items-center gap-3">
-          <Link href="/" className="text-sm font-bold text-neutral-100 hover:text-white transition-colors mr-1">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <Link href="/" className="text-sm font-bold text-neutral-100 hover:text-white transition-colors">
             GenMarket<span className="text-neutral-500">.</span>
           </Link>
-          <span className="text-xs font-mono text-neutral-300 bg-neutral-800 border border-neutral-700 px-2.5 py-1 rounded-md">
+          <span className="hidden sm:inline-flex text-xs font-mono text-neutral-300 bg-neutral-800 border border-neutral-700 px-2.5 py-1 rounded-md">
             GenLayer Python
           </span>
           <LintBadge result={lintResult} linting={linting} />
@@ -234,7 +234,7 @@ export default function GenLayerEditor() {
         <div className="flex items-center gap-2">
           <button
             onClick={handleCopy}
-            className="text-xs text-neutral-400 hover:text-neutral-100 bg-neutral-800 border border-neutral-700 px-3 py-1.5 rounded-lg transition-colors"
+            className="hidden sm:block text-xs text-neutral-400 hover:text-neutral-100 bg-neutral-800 border border-neutral-700 px-3 py-1.5 rounded-lg transition-colors"
           >
             {copied ? 'Copied!' : 'Copy'}
           </button>

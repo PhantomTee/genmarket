@@ -41,9 +41,11 @@ export default function BrowsePage() {
         <Link href="/" className="text-xl font-bold tracking-tight text-neutral-900">
           GenMarket<span className="text-neutral-400">.</span>
         </Link>
-        <div className="flex items-center gap-6">
-          <Link href="/sell" className="text-sm text-neutral-500 hover:text-neutral-900 transition-colors">Sell</Link>
-          <Link href="/dashboard" className="text-sm text-neutral-500 hover:text-neutral-900 transition-colors">Dashboard</Link>
+        <div className="flex items-center gap-4 sm:gap-6">
+          <div className="hidden sm:flex items-center gap-6">
+            <Link href="/sell" className="text-sm text-neutral-500 hover:text-neutral-900 transition-colors">Sell</Link>
+            <Link href="/dashboard" className="text-sm text-neutral-500 hover:text-neutral-900 transition-colors">Dashboard</Link>
+          </div>
           <WalletConnect />
         </div>
       </nav>

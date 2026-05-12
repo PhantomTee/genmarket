@@ -114,7 +114,7 @@ export default function ListingPage() {
               {listing.status}
             </span>
           </div>
-          <h1 className="text-3xl md:text-4xl font-bold text-neutral-900 leading-tight mb-2">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-neutral-900 leading-tight mb-2">
             {listing.title}
           </h1>
           <p className="text-neutral-500 text-base max-w-2xl">{listing.description}</p>

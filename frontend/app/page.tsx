@@ -26,16 +26,12 @@ export default async function HomePage() {
         <Link href="/" className="text-xl font-bold tracking-tight text-neutral-900">
           GenMarket<span className="text-neutral-400">.</span>
         </Link>
-        <div className="flex items-center gap-6">
-          <Link href="/browse" className="text-sm text-neutral-500 hover:text-neutral-900 transition-colors">
-            Browse
-          </Link>
-          <Link href="/sell" className="text-sm text-neutral-500 hover:text-neutral-900 transition-colors">
-            Sell
-          </Link>
-          <Link href="/editor" className="text-sm text-neutral-500 hover:text-neutral-900 transition-colors">
-            Editor
-          </Link>
+        <div className="flex items-center gap-4 sm:gap-6">
+          <div className="hidden sm:flex items-center gap-6">
+            <Link href="/browse" className="text-sm text-neutral-500 hover:text-neutral-900 transition-colors">Browse</Link>
+            <Link href="/sell" className="text-sm text-neutral-500 hover:text-neutral-900 transition-colors">Sell</Link>
+            <Link href="/editor" className="text-sm text-neutral-500 hover:text-neutral-900 transition-colors">Editor</Link>
+          </div>
           <WalletConnect />
         </div>
       </nav>
@@ -46,7 +42,7 @@ export default async function HomePage() {
           <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
           Powered by GenLayer
         </div>
-        <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-neutral-900 leading-[1.05] mb-6 max-w-4xl">
+        <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold tracking-tight text-neutral-900 leading-[1.05] mb-6 max-w-4xl">
           The marketplace for<br />
           <span className="text-neutral-400">intelligent contracts.</span>
         </h1>

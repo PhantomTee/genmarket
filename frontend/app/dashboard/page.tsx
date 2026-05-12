@@ -108,7 +108,7 @@ export default function DashboardPage() {
       <nav className="flex items-center justify-between px-6 md:px-12 py-5 border-b border-neutral-200">
         <Link href="/" className="text-xl font-bold">GenMarket<span className="text-neutral-400">.</span></Link>
         <div className="flex items-center gap-4">
-          <Link href="/sell" className="text-sm text-neutral-500 hover:text-neutral-900 transition-colors">+ New listing</Link>
+          <Link href="/sell" className="hidden sm:block text-sm text-neutral-500 hover:text-neutral-900 transition-colors">+ New listing</Link>
           <WalletConnect />
         </div>
       </nav>
