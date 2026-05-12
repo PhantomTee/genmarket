@@ -152,8 +152,11 @@ export default function SellPage() {
       }
     } catch (e: any) {
       setLintStatus('failed');
-      setLintOutput(e.message);
-      setParsedErrors([{ line: null, column: null, message: e.message }]);
+      const msg = e.message?.includes('Failed to fetch')
+        ? 'Cannot reach lint server. Check that NEXT_PUBLIC_BACKEND_URL is set in Vercel, or upload directly without lint.'
+        : e.message;
+      setLintOutput(msg);
+      setParsedErrors([{ line: null, column: null, message: msg }]);
     }
   }
 
@@ -334,13 +337,13 @@ export default function SellPage() {
             </div>
           )}
 
-          {/* Step 2 — Lint gate + optional deploy demo */}
+          {/* Step 2 — Upload + optional lint + optional deploy demo */}
           {step === 2 && (
             <div className="flex flex-col gap-5">
               <h1 className="text-2xl font-bold text-neutral-900">Upload source code</h1>
               <p className="text-sm text-neutral-500">
-                Your contract is validated with GenVM lint before upload. Code is encrypted in
-                your browser — we never see the plaintext.
+                Code is encrypted in your browser — we never see the plaintext.
+                Run lint to validate, or upload directly.
               </p>
               <p className="text-xs text-neutral-400">
                 Don&apos;t have your contract ready?{' '}
@@ -369,6 +372,24 @@ export default function SellPage() {
                   }}
                 />
               </label>
+
+              {/* Download button — shown when file is loaded */}
+              {sourceFile && (
+                <button
+                  onClick={() => {
+                    const blob = new Blob([sourceCode || ''], { type: 'text/x-python' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = sourceFile.name ?? 'contract.py';
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="inline-flex items-center gap-2 text-sm text-neutral-600 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:text-neutral-900 px-4 py-2.5 rounded-xl transition-colors self-start"
+                >
+                  ⬇ Download {sourceFile.name}
+                </button>
+              )}
 
               {/* Lint passed */}
               {lintStatus === 'passed' && (
@@ -428,7 +449,7 @@ export default function SellPage() {
                 </div>
               )}
 
-              {/* Deploy Demo section — shown only after lint passes */}
+              {/* Deploy Demo section — shown after lint passes */}
               {lintStatus === 'passed' && (
                 <div className="border border-neutral-200 rounded-2xl px-4 py-4 flex flex-col gap-3 bg-white">
                   <div>
@@ -487,25 +508,26 @@ export default function SellPage() {
                 >
                   Back
                 </button>
-                {lintStatus !== 'passed' ? (
-                  <button
-                    onClick={handleLint}
-                    disabled={!sourceFile || lintStatus === 'linting'}
-                    className="flex-1 bg-neutral-900 text-[#F7F4EF] font-semibold py-3 rounded-2xl hover:bg-neutral-700 transition-colors disabled:opacity-50"
-                  >
-                    {lintStatus === 'linting' ? 'Checking contract…' : 'Check contract'}
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleFileEncryptAndUpload}
-                    disabled={uploading || !address}
-                    className="flex-1 bg-neutral-900 text-[#F7F4EF] font-semibold py-3 rounded-2xl hover:bg-neutral-700 transition-colors disabled:opacity-50"
-                  >
-                    {uploading ? 'Encrypting & uploading…' : 'Encrypt & upload'}
-                  </button>
-                )}
+                <button
+                  onClick={handleLint}
+                  disabled={!sourceFile || lintStatus === 'linting'}
+                  className={`flex-1 text-sm font-medium py-3 rounded-2xl border transition-colors disabled:opacity-50 ${
+                    lintStatus === 'passed'
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                      : 'bg-white border-neutral-200 text-neutral-700 hover:border-neutral-400'
+                  }`}
+                >
+                  {lintStatus === 'linting' ? 'Checking…' : lintStatus === 'passed' ? '✓ Lint passed' : 'Check contract'}
+                </button>
               </div>
-              {!address && lintStatus === 'passed' && (
+              <button
+                onClick={handleFileEncryptAndUpload}
+                disabled={uploading || !address || !sourceFile}
+                className="w-full bg-neutral-900 text-[#F7F4EF] font-semibold py-3.5 rounded-2xl hover:bg-neutral-700 transition-colors disabled:opacity-50"
+              >
+                {uploading ? 'Encrypting & uploading…' : 'Encrypt & upload →'}
+              </button>
+              {!address && (
                 <p className="text-xs text-amber-600 text-center">Connect your wallet to upload</p>
               )}
             </div>

@@ -448,6 +448,16 @@ export default function GenLayerEditor() {
     }
   }
 
+  function handleDownload() {
+    const blob = new Blob([code], { type: 'text/x-python' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'contract.py';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   function handleUseInListing() {
     const cleaned = normalizePythonSource(code);
     localStorage.setItem(DRAFT_KEY, cleaned);
@@ -487,6 +497,14 @@ export default function GenLayerEditor() {
           {hasDraft && <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: '#3e3e42', color: '#858585' }}>Draft</span>}
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleDownload}
+            className="text-xs px-3 py-1 rounded transition-colors"
+            style={{ background: '#3e3e42', color: '#cccccc' }}
+            title="Download contract.py"
+          >
+            ⬇ Download
+          </button>
           <button
             onClick={handleGenVMLint}
             disabled={genVMLintStatus === 'running'}
