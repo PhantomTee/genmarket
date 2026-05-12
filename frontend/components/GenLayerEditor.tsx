@@ -11,6 +11,8 @@ import { useWallet } from '../lib/wallet-context';
 
 const MonacoEditorComponent = dynamic(() => import('@monaco-editor/react'), { ssr: false });
 
+const DRAFT_KEY = 'genmarket_contract_draft';
+
 const STARTER_TEMPLATE = `# { "Depends": "py-genlayer:test" }
 
 from genlayer import *
@@ -125,6 +127,18 @@ function LintPanel({
   );
 }
 
+function getInitialCode(): string {
+  if (typeof window === 'undefined') return STARTER_TEMPLATE;
+  // Prefer draft coming from sell page (via sessionStorage)
+  const pending = sessionStorage.getItem('pending_source');
+  if (pending) {
+    sessionStorage.removeItem('pending_source');
+    localStorage.setItem(DRAFT_KEY, pending);
+    return pending;
+  }
+  return localStorage.getItem(DRAFT_KEY) ?? STARTER_TEMPLATE;
+}
+
 export default function GenLayerEditor() {
   const router = useRouter();
   const { writeClient, connect, connecting } = useWallet();
@@ -133,6 +147,7 @@ export default function GenLayerEditor() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [code, setCode] = useState(STARTER_TEMPLATE);
+  const [hasDraft, setHasDraft] = useState(false);
   const [lintResult, setLintResult] = useState<LintResult | null>(null);
   const [linting, setLinting] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -141,13 +156,23 @@ export default function GenLayerEditor() {
   const [deployError, setDeployError] = useState<string | null>(null);
   const [copiedAddr, setCopiedAddr] = useState(false);
 
+  // Load draft/pending source on client mount
+  useEffect(() => {
+    const initial = getInitialCode();
+    setCode(initial);
+    setHasDraft(initial !== STARTER_TEMPLATE);
+    if (editorRef.current) {
+      editorRef.current.setValue(initial);
+    }
+    runLint(initial);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const runLint = useCallback((source: string) => {
     setLinting(true);
-    // Run synchronously in the browser — no API call, no cold-start delay
     const result = lintContract(source);
     setLintResult(result);
 
-    // Draw squiggles in Monaco
     if (editorRef.current && monacoRef.current) {
       const model = editorRef.current.getModel();
       if (model) {
@@ -186,9 +211,13 @@ export default function GenLayerEditor() {
   function handleEditorChange(value: string | undefined) {
     const src = value ?? '';
     setCode(src);
+    setHasDraft(src !== STARTER_TEMPLATE);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setLinting(true);
-    debounceRef.current = setTimeout(() => runLint(src), 400);
+    debounceRef.current = setTimeout(() => {
+      localStorage.setItem(DRAFT_KEY, src);
+      runLint(src);
+    }, 400);
   }
 
   function handleEditorMount(
@@ -197,7 +226,7 @@ export default function GenLayerEditor() {
   ) {
     editorRef.current = editor;
     monacoRef.current = monaco;
-    runLint(STARTER_TEMPLATE);
+    // Initial lint runs in the useEffect after mount
   }
 
   function jumpToLine(line: number) {
@@ -213,7 +242,16 @@ export default function GenLayerEditor() {
     setTimeout(() => setCopied(false), 1500);
   }
 
+  function handleResetTemplate() {
+    localStorage.removeItem(DRAFT_KEY);
+    setCode(STARTER_TEMPLATE);
+    setHasDraft(false);
+    editorRef.current?.setValue(STARTER_TEMPLATE);
+    runLint(STARTER_TEMPLATE);
+  }
+
   function handleUseInListing() {
+    localStorage.setItem(DRAFT_KEY, code);
     sessionStorage.setItem('pending_source', code);
     router.push('/sell');
   }
@@ -225,7 +263,6 @@ export default function GenLayerEditor() {
       await connect();
       return;
     }
-    // Block deploy if lint errors exist
     if (lintResult && lintResult.errors.length > 0) {
       setDeployError(`Fix ${lintResult.errors.length} lint error${lintResult.errors.length > 1 ? 's' : ''} before deploying.`);
       return;
@@ -248,7 +285,6 @@ export default function GenLayerEditor() {
     setTimeout(() => setCopiedAddr(false), 1500);
   }
 
-  // Cleanup blob URLs and debounce on unmount
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -269,6 +305,15 @@ export default function GenLayerEditor() {
           <LintBadge result={lintResult} linting={linting} />
         </div>
         <div className="flex items-center gap-2">
+          {hasDraft && (
+            <button
+              onClick={handleResetTemplate}
+              className="hidden sm:block text-xs text-neutral-500 hover:text-neutral-300 px-2 py-1.5 rounded-lg transition-colors"
+              title="Discard draft and reset to starter template"
+            >
+              Reset template
+            </button>
+          )}
           <button
             onClick={handleCopy}
             className="hidden sm:block text-xs text-neutral-400 hover:text-neutral-100 bg-neutral-800 border border-neutral-700 px-3 py-1.5 rounded-lg transition-colors"

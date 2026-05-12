@@ -9,6 +9,7 @@ import { encryptFile, parseGEN } from '../../lib/encryption';
 import { createListing } from '../../lib/genlayer';
 
 const CATEGORIES = ['DeFi', 'NFT', 'DAO', 'Oracle', 'Identity', 'Utility'];
+const DRAFT_KEY = 'genmarket_contract_draft';
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -34,6 +35,7 @@ export default function SellPage() {
   });
 
   const [sourceFile, setSourceFile] = useState<File | null>(null);
+  const [sourceCode, setSourceCode] = useState<string>('');
   const [encryptedSource, setEncryptedSource] = useState<string | null>(null);
   const [encryptionKey, setEncryptionKey] = useState<string | null>(null);
   const [ipfsCid, setIpfsCid] = useState<string | null>(null);
@@ -48,16 +50,28 @@ export default function SellPage() {
   const [lintStatus, setLintStatus] = useState<LintStatus>('idle');
   const [lintOutput, setLintOutput] = useState<string>('');
 
-  // Prefill source from /editor if available
+  // Prefill source from editor (sessionStorage) or restore file name from localStorage draft
   useEffect(() => {
     const pending = sessionStorage.getItem('pending_source');
     if (pending && !sourceFile) {
       const blob = new Blob([pending], { type: 'text/x-python' });
       const file = new File([blob], 'contract.py', { type: 'text/x-python' });
       setSourceFile(file);
+      setSourceCode(pending);
+      localStorage.setItem(DRAFT_KEY, pending);
       sessionStorage.removeItem('pending_source');
     }
   }, []);
+
+  // When the user selects a file, read its content and persist to localStorage
+  useEffect(() => {
+    if (!sourceFile) return;
+    // Skip synthetic files created from sessionStorage above (already handled)
+    sourceFile.text().then((text) => {
+      setSourceCode(text);
+      localStorage.setItem(DRAFT_KEY, text);
+    });
+  }, [sourceFile]);
 
   function update(field: keyof FormData, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -70,11 +84,14 @@ export default function SellPage() {
     try {
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
       if (!backendUrl) throw new Error('NEXT_PUBLIC_BACKEND_URL is not set');
-      const sourceCode = await sourceFile.text();
+      const src = await sourceFile.text();
+      // Persist latest content before linting so editor can restore it
+      setSourceCode(src);
+      localStorage.setItem(DRAFT_KEY, src);
       const res = await fetch(`${backendUrl}/api/contracts/lint`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sourceCode }),
+        body: JSON.stringify({ sourceCode: src }),
       });
       const text = await res.text();
       let data: any;
@@ -93,6 +110,11 @@ export default function SellPage() {
       setLintStatus('failed');
       setLintOutput(e.message);
     }
+  }
+
+  function handleEditContract() {
+    // Draft is already in localStorage — editor will pick it up
+    router.push('/editor');
   }
 
   async function handleFileEncryptAndUpload() {
@@ -146,6 +168,8 @@ export default function SellPage() {
         demo_contract_address: form.demo_contract_address,
         ipfs_cid: ipfsCid,
       });
+      // Listing published — safe to clear the draft
+      localStorage.removeItem(DRAFT_KEY);
       setStep(6);
     } catch (e: any) {
       setError(e.message);
@@ -277,12 +301,18 @@ export default function SellPage() {
               )}
               {lintStatus === 'failed' && (
                 <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-                  <p className="font-semibold mb-1">Lint failed - fix errors before uploading</p>
+                  <p className="font-semibold mb-1">Lint failed — fix errors before uploading</p>
                   {lintOutput && (
                     <pre className="text-xs whitespace-pre-wrap font-mono mt-2 max-h-48 overflow-y-auto text-red-800">
                       {lintOutput}
                     </pre>
                   )}
+                  <button
+                    onClick={handleEditContract}
+                    className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-red-700 bg-white border border-red-300 hover:border-red-500 hover:text-red-900 px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    ← Edit contract
+                  </button>
                 </div>
               )}
 
