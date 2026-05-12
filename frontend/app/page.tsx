@@ -51,7 +51,7 @@ export default async function HomePage() {
           <span className="text-neutral-400">intelligent contracts.</span>
         </h1>
         <p className="text-lg text-neutral-500 max-w-xl leading-relaxed mb-10">
-          Buy and sell verified GenLayer contracts. Test live demos, get AI-powered code evaluation, and pay with escrow — all on-chain.
+          Buy and sell verified GenLayer contracts. Test live demos, get AI-powered code evaluation, and pay with escrow. All on-chain.
         </p>
         <div className="flex flex-col sm:flex-row gap-3">
           <Link

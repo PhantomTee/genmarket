@@ -87,7 +87,7 @@ export default function BrowsePage() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-24 text-neutral-400">
-            <p className="text-4xl mb-3">—</p>
+            <p className="text-4xl mb-3">·</p>
             <p className="text-sm">No listings found{search ? ` for "${search}"` : ''}.</p>
           </div>
         ) : (

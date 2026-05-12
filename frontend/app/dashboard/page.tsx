@@ -149,7 +149,7 @@ export default function DashboardPage() {
               </div>
             ) : listings.length === 0 ? (
               <div className="text-center py-16 text-neutral-400">
-                <p className="mb-3 text-4xl">—</p>
+                <p className="mb-3 text-4xl">·</p>
                 <p className="text-sm mb-4">You haven&apos;t listed any contracts yet.</p>
                 <Link href="/sell" className="text-sm bg-neutral-900 text-[#F7F4EF] px-5 py-2.5 rounded-full hover:bg-neutral-700 transition-colors">
                   Create your first listing
@@ -194,7 +194,7 @@ export default function DashboardPage() {
           <div className="flex flex-col gap-3">
             {purchases.length === 0 ? (
               <div className="text-center py-16 text-neutral-400">
-                <p className="mb-3 text-4xl">—</p>
+                <p className="mb-3 text-4xl">·</p>
                 <p className="text-sm mb-4">No purchases yet.</p>
                 <Link href="/browse" className="text-sm bg-neutral-900 text-[#F7F4EF] px-5 py-2.5 rounded-full hover:bg-neutral-700 transition-colors">
                   Browse contracts

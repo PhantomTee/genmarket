@@ -125,7 +125,7 @@ export default function ListingPage() {
           {/* LEFT — Path A: Try it yourself */}
           <div className="flex flex-col gap-5">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-neutral-900">Path A — Try it yourself</h2>
+              <h2 className="text-lg font-bold text-neutral-900">Path A: Try it yourself</h2>
               <span className="text-xs text-neutral-400">Live contract</span>
             </div>
 
@@ -151,14 +151,14 @@ export default function ListingPage() {
               onClick={() => setShowPayment(true)}
               className="w-full bg-neutral-900 text-[#F7F4EF] font-semibold py-3.5 rounded-2xl hover:bg-neutral-700 transition-colors"
             >
-              Buy this code — {formatGEN(listing.price)}
+              Buy this code · {formatGEN(listing.price)}
             </button>
           </div>
 
           {/* RIGHT — Path B: Ask GenLayer */}
           <div className="flex flex-col gap-5">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-neutral-900">Path B — Ask GenLayer</h2>
+              <h2 className="text-lg font-bold text-neutral-900">Path B: Ask GenLayer</h2>
               <span className="text-xs text-neutral-400 bg-purple-50 border border-purple-200 text-purple-600 px-2 py-1 rounded-full">AI Evaluation</span>
             </div>
 
@@ -203,7 +203,7 @@ export default function ListingPage() {
               onClick={() => setShowPayment(true)}
               className="w-full bg-white border border-neutral-200 text-neutral-900 font-semibold py-3.5 rounded-2xl hover:border-neutral-400 transition-colors"
             >
-              Buy this code — {formatGEN(listing.price)}
+              Buy this code · {formatGEN(listing.price)}
             </button>
           </div>
         </div>

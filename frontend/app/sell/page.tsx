@@ -79,7 +79,7 @@ export default function SellPage() {
         setLintStatus('passed');
       } else {
         setLintStatus('failed');
-        setLintOutput(data.stdout || data.stderr || data.summary || 'Lint failed — see server logs');
+        setLintOutput(data.stdout || data.stderr || data.summary || 'Lint failed - check server logs');
       }
     } catch (e: any) {
       setLintStatus('failed');
@@ -154,7 +154,12 @@ export default function SellPage() {
         <Link href="/" className="text-xl font-bold tracking-tight text-neutral-900">
           GenMarket<span className="text-neutral-400">.</span>
         </Link>
-        <WalletConnect />
+        <div className="flex items-center gap-4">
+          <Link href="/editor" className="text-sm text-neutral-500 hover:text-neutral-900 transition-colors">
+            ← Editor
+          </Link>
+          <WalletConnect />
+        </div>
       </nav>
 
       <main className="flex-1 flex flex-col items-center px-6 py-12">
@@ -230,7 +235,13 @@ export default function SellPage() {
               <h1 className="text-2xl font-bold text-neutral-900">Upload source code</h1>
               <p className="text-sm text-neutral-500">
                 Your contract is validated with GenVM lint before upload. Code is encrypted in
-                your browser — we never see the plaintext.
+                your browser. We never see the plaintext.
+              </p>
+              <p className="text-xs text-neutral-400">
+                Don&apos;t have your contract ready?{' '}
+                <Link href="/editor" className="text-neutral-600 underline hover:text-neutral-900 transition-colors">
+                  Write it in the editor →
+                </Link>
               </p>
               <label className="flex flex-col items-center justify-center border-2 border-dashed border-neutral-200 rounded-2xl p-10 cursor-pointer hover:border-neutral-400 transition-colors bg-white">
                 <span className="text-3xl mb-3">📄</span>
@@ -258,7 +269,7 @@ export default function SellPage() {
               )}
               {lintStatus === 'failed' && (
                 <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-                  <p className="font-semibold mb-1">Lint failed — fix errors before uploading</p>
+                  <p className="font-semibold mb-1">Lint failed - fix errors before uploading</p>
                   {lintOutput && (
                     <pre className="text-xs whitespace-pre-wrap font-mono mt-2 max-h-48 overflow-y-auto text-red-800">
                       {lintOutput}
@@ -328,7 +339,7 @@ export default function SellPage() {
                   ['Title', form.title],
                   ['Category', form.category],
                   ['Price', `${form.priceGEN} GEN`],
-                  ['IPFS CID', ipfsCid ?? '—'],
+                  ['IPFS CID', ipfsCid ?? '(pending)'],
                   ['Demo contract', form.demo_contract_address],
                 ].map(([label, value]) => (
                   <div key={label} className="flex justify-between items-start px-4 py-3 gap-4">

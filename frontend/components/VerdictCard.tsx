@@ -91,7 +91,7 @@ export default function VerdictCard({ verdict, loading }: Props) {
           <ul className="flex flex-col gap-1.5">
             {verdict.caveats.map((c, i) => (
               <li key={i} className="flex gap-2 text-sm text-neutral-600">
-                <span className="mt-0.5 shrink-0 text-neutral-400">—</span>
+                <span className="mt-0.5 shrink-0 text-neutral-400">·</span>
                 <span>{c}</span>
               </li>
             ))}

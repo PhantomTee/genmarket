@@ -118,7 +118,7 @@ const blob = new Blob([arrayBuffer], { type: "text/x-python" });
               <div>
                 <h2 className="text-lg font-bold text-neutral-900 mb-1">Lock payment in escrow</h2>
                 <p className="text-sm text-neutral-500">
-                  Your payment is held in a smart contract. You keep control — if the code doesn&apos;t deliver, you can refund.
+                  Your payment is held in a smart contract. You keep control: if the code doesn&apos;t deliver, you can refund.
                 </p>
               </div>
               <div className="bg-white border border-neutral-200 rounded-2xl p-4 flex items-center justify-between">
