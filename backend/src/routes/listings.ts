@@ -1,9 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { pinContent } from '../services/ipfs';
-import { encryptKeyWithMaster } from '../services/encryption';
-import { getAllListings, getListing, getContractABI } from '../services/genlayer';
-import { insertListing, getListingById } from '../db/schema';
+import { pinContent } from '../services/ipfs.js';
+import { encryptKeyWithMaster } from '../services/encryption.js';
+import { getAllListings, getListing, getContractABI } from '../services/genlayer.js';
+import { insertListing, getListingById } from '../db/schema.js';
 
 const router = Router();
 

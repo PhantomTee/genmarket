@@ -9,12 +9,12 @@ process.on('uncaughtException', (err) => {
   console.error('Uncaught exception:', err.message);
 });
 import cors from 'cors';
-import { initDb } from './db/schema';
-import listingsRouter from './routes/listings';
-import judgeRouter from './routes/judge';
-import paymentsRouter from './routes/payments';
-import contractsRouter from './routes/contracts';
-import { lintContract } from './services/lint';
+import { initDb } from './db/schema.js';
+import listingsRouter from './routes/listings.js';
+import judgeRouter from './routes/judge.js';
+import paymentsRouter from './routes/payments.js';
+import contractsRouter from './routes/contracts.js';
+import { lintContract } from './services/lint.js';
 
 const app = express();
 

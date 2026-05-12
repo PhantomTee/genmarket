@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { fetchContent } from '../services/ipfs';
-import { decryptFromStorage, decryptKeyWithMaster } from '../services/encryption';
-import { evaluateCode, getListing } from '../services/genlayer';
-import { getListingById } from '../db/schema';
+import { fetchContent } from '../services/ipfs.js';
+import { decryptFromStorage, decryptKeyWithMaster } from '../services/encryption.js';
+import { evaluateCode, getListing } from '../services/genlayer.js';
+import { getListingById } from '../db/schema.js';
 
 const router = Router();
 

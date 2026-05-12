@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
-import { getEscrow } from '../services/genlayer';
-import { getListingById } from '../db/schema';
-import { decryptKeyWithMaster } from '../services/encryption';
+import { getEscrow } from '../services/genlayer.js';
+import { getListingById } from '../db/schema.js';
+import { decryptKeyWithMaster } from '../services/encryption.js';
 
 const router = Router();
 
