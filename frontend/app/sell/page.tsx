@@ -68,8 +68,10 @@ export default function SellPage() {
     setLintStatus('linting');
     setLintOutput('');
     try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+      if (!backendUrl) throw new Error('NEXT_PUBLIC_BACKEND_URL is not set');
       const sourceCode = await sourceFile.text();
-      const res = await fetch('/api/contracts/lint', {
+      const res = await fetch(`${backendUrl}/api/contracts/lint`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sourceCode }),
