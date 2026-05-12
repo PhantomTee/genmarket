@@ -10,12 +10,13 @@ interface Props {
   listingId: string;
   price: number;        // wei
   ipfsCid: string;
+  listingTitle: string;
   onClose: () => void;
 }
 
 type Step = 'escrow' | 'confirm' | 'download';
 
-export default function PaymentModal({ listingId, price, ipfsCid, onClose }: Props) {
+export default function PaymentModal({ listingId, price, ipfsCid, listingTitle, onClose }: Props) {
   const { address, writeClient } = useWallet();
   const [step, setStep] = useState<Step>('escrow');
   const [busy, setBusy] = useState(false);
@@ -74,6 +75,23 @@ const blob = new Blob([arrayBuffer], { type: "text/x-python" });
 
       // 4. Buyer calls confirm_purchase on-chain (releases funds to seller)
       await confirmPurchase(writeClient, escrowId);
+
+      // 5. Persist purchase in localStorage so the dashboard buying tab survives refreshes
+      try {
+        const stored = JSON.parse(localStorage.getItem('purchases') ?? '[]');
+        const updated = [
+          ...stored.filter((p: any) => p.listing_id !== listingId),
+          {
+            listing_id: listingId,
+            title: listingTitle,
+            price,
+            ipfs_cid: ipfs_cid ?? ipfsCid,
+            escrow_id: escrowId,
+            encryption_key_base64,
+          },
+        ];
+        localStorage.setItem('purchases', JSON.stringify(updated));
+      } catch { /* non-fatal */ }
 
       setStep('download');
     } catch (e: any) {

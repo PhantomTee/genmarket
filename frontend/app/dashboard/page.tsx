@@ -4,10 +4,11 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import WalletConnect from '../../components/WalletConnect';
 import { useWallet } from '../../lib/wallet-context';
-import { getListingsBySeller, removeListing, Listing } from '../../lib/genlayer';
+import { getListingsBySeller, removeListing, refund, Listing } from '../../lib/genlayer';
 import { formatGEN } from '../../lib/encryption';
 import { fetchFromIPFS } from '../../lib/ipfs';
 import { decryptToBuffer } from '../../lib/encryption';
+import { useToast } from '../../components/Toast';
 
 type Tab = 'selling' | 'buying';
 
@@ -16,11 +17,13 @@ interface Purchase {
   title: string;
   price: number;
   ipfs_cid: string;
+  escrow_id?: string;
   encryption_key_base64?: string;
 }
 
 export default function DashboardPage() {
   const { address, writeClient } = useWallet();
+  const { showToast } = useToast();
   const [tab, setTab] = useState<Tab>('selling');
 
   // Selling
@@ -31,6 +34,7 @@ export default function DashboardPage() {
   // Buying
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [refundingId, setRefundingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!address) return;
@@ -40,11 +44,11 @@ export default function DashboardPage() {
       .catch(() => setListings([]))
       .finally(() => setLoadingListings(false));
 
-    // Load purchase history from sessionStorage (set during PaymentModal step 3)
-    const raw = sessionStorage.getItem('purchases');
-    if (raw) {
-      try { setPurchases(JSON.parse(raw)); } catch { /* ignore */ }
-    }
+    // Load purchase history from localStorage (persists across sessions)
+    try {
+      const raw = localStorage.getItem('purchases');
+      if (raw) setPurchases(JSON.parse(raw));
+    } catch { /* ignore */ }
   }, [address]);
 
   async function handleRemove(listingId: string) {
@@ -53,8 +57,9 @@ export default function DashboardPage() {
     try {
       await removeListing(writeClient, listingId);
       setListings((prev) => prev.map((l) => l.id === listingId ? { ...l, status: 'removed' } : l));
+      showToast('Listing removed.', 'success');
     } catch (e: any) {
-      alert(e.message);
+      showToast(e.message ?? 'Failed to remove listing.', 'error');
     } finally {
       setRemovingId(null);
     }
@@ -77,10 +82,28 @@ export default function DashboardPage() {
       a.download = `listing-${purchase.listing_id}.py`;
       a.click();
       URL.revokeObjectURL(url);
+      showToast('Download started.', 'success');
     } catch (e: any) {
-      alert(e.message);
+      showToast(e.message ?? 'Download failed.', 'error');
     } finally {
       setDownloadingId(null);
+    }
+  }
+
+  async function handleRefund(purchase: Purchase) {
+    if (!writeClient || !purchase.escrow_id) return;
+    setRefundingId(purchase.listing_id);
+    try {
+      await refund(writeClient, purchase.escrow_id);
+      // Remove from purchases list since escrow is now refunded
+      const updated = purchases.filter((p) => p.listing_id !== purchase.listing_id);
+      setPurchases(updated);
+      try { localStorage.setItem('purchases', JSON.stringify(updated)); } catch { /* ignore */ }
+      showToast('Refund processed.', 'success');
+    } catch (e: any) {
+      showToast(e.message ?? 'Refund failed.', 'error');
+    } finally {
+      setRefundingId(null);
     }
   }
 
@@ -202,22 +225,33 @@ export default function DashboardPage() {
               </div>
             ) : (
               purchases.map((p) => (
-                <div key={p.listing_id} className="bg-white border border-neutral-200 rounded-2xl p-4 flex items-center gap-4">
+                <div key={p.listing_id} className="bg-white border border-neutral-200 rounded-2xl p-4 flex items-center gap-3 flex-wrap sm:flex-nowrap">
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-neutral-900 line-clamp-1">{p.title}</p>
                     <p className="text-xs text-neutral-400 mt-0.5">{formatGEN(p.price)}</p>
                   </div>
-                  {p.encryption_key_base64 ? (
-                    <button
-                      onClick={() => handleDownload(p)}
-                      disabled={downloadingId === p.listing_id}
-                      className="text-xs bg-neutral-900 text-[#F7F4EF] px-3 py-1.5 rounded-lg hover:bg-neutral-700 transition-colors disabled:opacity-50"
-                    >
-                      {downloadingId === p.listing_id ? 'Decrypting…' : 'Download source'}
-                    </button>
-                  ) : (
-                    <span className="text-xs text-neutral-400">Key not available</span>
-                  )}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {p.encryption_key_base64 ? (
+                      <button
+                        onClick={() => handleDownload(p)}
+                        disabled={downloadingId === p.listing_id}
+                        className="text-xs bg-neutral-900 text-[#F7F4EF] px-3 py-1.5 rounded-lg hover:bg-neutral-700 transition-colors disabled:opacity-50"
+                      >
+                        {downloadingId === p.listing_id ? 'Decrypting…' : 'Download source'}
+                      </button>
+                    ) : (
+                      <span className="text-xs text-neutral-400">Key pending</span>
+                    )}
+                    {p.escrow_id && writeClient && (
+                      <button
+                        onClick={() => handleRefund(p)}
+                        disabled={refundingId === p.listing_id}
+                        className="text-xs text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        {refundingId === p.listing_id ? 'Refunding…' : 'Refund'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))
             )}

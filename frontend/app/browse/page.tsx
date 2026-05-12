@@ -22,6 +22,14 @@ export default function BrowsePage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { All: listings.length };
+    for (const l of listings) {
+      counts[l.category] = (counts[l.category] ?? 0) + 1;
+    }
+    return counts;
+  }, [listings]);
+
   const filtered = useMemo(() => {
     return listings.filter((l) => {
       const matchesCategory = category === 'All' || l.category === category;
@@ -65,19 +73,29 @@ export default function BrowsePage() {
 
         {/* Category tabs */}
         <div className="flex flex-wrap gap-2 mb-8">
-          {CATEGORIES.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setCategory(cat)}
-              className={`text-sm font-medium px-4 py-1.5 rounded-full border transition-colors ${
-                category === cat
-                  ? 'bg-neutral-900 text-[#F7F4EF] border-neutral-900'
-                  : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-400'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
+          {CATEGORIES.map((cat) => {
+            const count = categoryCounts[cat] ?? 0;
+            return (
+              <button
+                key={cat}
+                onClick={() => setCategory(cat)}
+                className={`text-sm font-medium px-4 py-1.5 rounded-full border transition-colors flex items-center gap-1.5 ${
+                  category === cat
+                    ? 'bg-neutral-900 text-[#F7F4EF] border-neutral-900'
+                    : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-400'
+                }`}
+              >
+                {cat}
+                {!loading && (
+                  <span className={`text-xs font-normal tabular-nums ${
+                    category === cat ? 'text-neutral-400' : 'text-neutral-400'
+                  }`}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Grid */}

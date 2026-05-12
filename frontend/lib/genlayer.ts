@@ -269,8 +269,14 @@ export async function getListing(listingId: string): Promise<Listing> {
 }
 
 export async function getListingsBySeller(seller: string): Promise<Listing[]> {
-  const listings = await getAllListings();
-  return listings.filter((listing) => listing.seller.toLowerCase() === seller.toLowerCase());
+  const client = createReadClient();
+  const raw = await client.readContract({
+    address: marketplaceAddress() as `0x${string}`,
+    functionName: 'get_listings_by_seller_json',
+    args: [seller],
+  });
+  const result = (typeof raw === 'string' ? JSON.parse(raw) : raw) as unknown as Listing[];
+  return Array.isArray(result) ? result : [];
 }
 
 export async function getListingsByCategory(category: string): Promise<Listing[]> {
@@ -312,6 +318,39 @@ export async function callContractMethod(
     functionName,
     args: args as any,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Deploy a new contract — returns the deployed contract address
+// ---------------------------------------------------------------------------
+
+export async function deployContract(
+  writeClient: ReturnType<typeof createClient>,
+  code: string
+): Promise<`0x${string}`> {
+  const txHash = await writeClient.deployContract({ code, args: [] });
+
+  const readClient = createReadClient();
+  const receipt = await readClient.waitForTransactionReceipt({
+    hash: txHash,
+    status: TransactionStatus.FINALIZED,
+    interval: 3_000,
+    retries: 60,
+  });
+
+  if (receipt.txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) {
+    throw new Error('Contract deployment failed on-chain');
+  }
+
+  // The deployed address lives in txDataDecoded or to_address
+  const decoded = (receipt as any).txDataDecoded;
+  const contractAddress =
+    decoded?.contractAddress ??
+    (receipt as any).to_address ??
+    (receipt as any).recipient;
+
+  if (!contractAddress) throw new Error('Deployment succeeded but contract address not found in receipt');
+  return contractAddress as `0x${string}`;
 }
 
 

@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import type { editor as MonacoEditor } from 'monaco-editor';
 import Link from 'next/link';
 import { lintContract, LintResult } from '../lib/lint';
+import { deployContract } from '../lib/genlayer';
+import { useWallet } from '../lib/wallet-context';
 
 const MonacoEditorComponent = dynamic(() => import('@monaco-editor/react'), { ssr: false });
 
@@ -125,6 +127,7 @@ function LintPanel({
 
 export default function GenLayerEditor() {
   const router = useRouter();
+  const { writeClient, connect, connecting } = useWallet();
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof import('monaco-editor') | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -133,6 +136,10 @@ export default function GenLayerEditor() {
   const [lintResult, setLintResult] = useState<LintResult | null>(null);
   const [linting, setLinting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [deploying, setDeploying] = useState(false);
+  const [deployedAddress, setDeployedAddress] = useState<string | null>(null);
+  const [deployError, setDeployError] = useState<string | null>(null);
+  const [copiedAddr, setCopiedAddr] = useState(false);
 
   const runLint = useCallback((source: string) => {
     setLinting(true);
@@ -211,6 +218,36 @@ export default function GenLayerEditor() {
     router.push('/sell');
   }
 
+  async function handleDeploy() {
+    setDeployError(null);
+    setDeployedAddress(null);
+    if (!writeClient) {
+      await connect();
+      return;
+    }
+    // Block deploy if lint errors exist
+    if (lintResult && lintResult.errors.length > 0) {
+      setDeployError(`Fix ${lintResult.errors.length} lint error${lintResult.errors.length > 1 ? 's' : ''} before deploying.`);
+      return;
+    }
+    setDeploying(true);
+    try {
+      const addr = await deployContract(writeClient, code);
+      setDeployedAddress(addr);
+    } catch (e: any) {
+      setDeployError(e.message ?? 'Deployment failed.');
+    } finally {
+      setDeploying(false);
+    }
+  }
+
+  function copyDeployedAddr() {
+    if (!deployedAddress) return;
+    navigator.clipboard.writeText(deployedAddress);
+    setCopiedAddr(true);
+    setTimeout(() => setCopiedAddr(false), 1500);
+  }
+
   // Cleanup blob URLs and debounce on unmount
   useEffect(() => {
     return () => {
@@ -239,6 +276,18 @@ export default function GenLayerEditor() {
             {copied ? 'Copied!' : 'Copy'}
           </button>
           <button
+            onClick={handleDeploy}
+            disabled={deploying || connecting}
+            className="hidden sm:flex items-center gap-1.5 text-xs text-emerald-300 hover:text-emerald-100 bg-emerald-900/40 border border-emerald-700/60 hover:border-emerald-500 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+          >
+            {deploying ? (
+              <>
+                <span className="w-3 h-3 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                Deploying…
+              </>
+            ) : connecting ? 'Connecting…' : '⬆ Deploy'}
+          </button>
+          <button
             onClick={handleUseInListing}
             className="text-xs text-neutral-900 bg-[#F7F4EF] hover:bg-white px-3 py-1.5 rounded-lg font-medium transition-colors"
           >
@@ -246,6 +295,35 @@ export default function GenLayerEditor() {
           </button>
         </div>
       </div>
+
+      {/* Deploy result / error banner */}
+      {(deployedAddress || deployError) && (
+        <div className={`shrink-0 px-4 py-2.5 flex items-center gap-3 border-b text-xs ${
+          deployedAddress
+            ? 'bg-emerald-950/60 border-emerald-700/50 text-emerald-300'
+            : 'bg-red-950/60 border-red-700/50 text-red-300'
+        }`}>
+          {deployedAddress ? (
+            <>
+              <span className="text-emerald-400 font-semibold shrink-0">Deployed:</span>
+              <span className="font-mono flex-1 truncate">{deployedAddress}</span>
+              <button
+                onClick={copyDeployedAddr}
+                className="shrink-0 bg-emerald-900/60 border border-emerald-700 px-2 py-0.5 rounded hover:bg-emerald-800/60 transition-colors"
+              >
+                {copiedAddr ? 'Copied!' : 'Copy'}
+              </button>
+              <button onClick={() => setDeployedAddress(null)} className="shrink-0 text-emerald-600 hover:text-emerald-300 transition-colors">×</button>
+            </>
+          ) : (
+            <>
+              <span className="text-red-400 font-semibold shrink-0">Deploy error:</span>
+              <span className="flex-1 truncate">{deployError}</span>
+              <button onClick={() => setDeployError(null)} className="shrink-0 text-red-600 hover:text-red-300 transition-colors">×</button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Editor — 65% */}
       <div style={{ height: '65%' }} className="shrink-0">
