@@ -207,47 +207,69 @@ export async function removeListing(
 
 export async function getAllListings(): Promise<Listing[]> {
   const client = createReadClient();
-  return client.readContract({
+
+  const countRaw = await client.readContract({
     address: marketplaceAddress(),
-    functionName: 'get_all_listings',
+    functionName: "get_listing_count",
     args: [],
-  }) as Promise<Listing[]>;
+  });
+
+  const count = Number(countRaw);
+  const listings: Listing[] = [];
+
+  for (let i = 0; i < count; i++) {
+    try {
+      const raw = await client.readContract({
+        address: marketplaceAddress(),
+        functionName: "get_listing_json",
+        args: [String(i)],
+      });
+
+      const listing = typeof raw === "string" ? JSON.parse(raw) : raw;
+
+      if ((listing as Listing).status === "active") {
+        listings.push(listing as Listing);
+      }
+    } catch (error) {
+      console.error(`Failed to load listing ${i}:`, error);
+    }
+  }
+
+  return listings;
 }
 
 export async function getListing(listingId: string): Promise<Listing> {
   const client = createReadClient();
-  return client.readContract({
+
+  const raw = await client.readContract({
     address: marketplaceAddress(),
-    functionName: 'get_listing',
+    functionName: "get_listing_json",
     args: [listingId],
-  }) as Promise<Listing>;
+  });
+
+  return (typeof raw === "string" ? JSON.parse(raw) : raw) as unknown as Listing;
 }
 
 export async function getListingsBySeller(seller: string): Promise<Listing[]> {
-  const client = createReadClient();
-  return client.readContract({
-    address: marketplaceAddress(),
-    functionName: 'get_listings_by_seller',
-    args: [seller],
-  }) as Promise<Listing[]>;
+  const listings = await getAllListings();
+  return listings.filter((listing) => listing.seller.toLowerCase() === seller.toLowerCase());
 }
 
 export async function getListingsByCategory(category: string): Promise<Listing[]> {
-  const client = createReadClient();
-  return client.readContract({
-    address: marketplaceAddress(),
-    functionName: 'get_listings_by_category',
-    args: [category],
-  }) as Promise<Listing[]>;
+  const listings = await getAllListings();
+  return listings.filter((listing) => listing.category === category);
 }
 
 export async function getEscrow(escrowId: string): Promise<Escrow> {
   const client = createReadClient();
-  return client.readContract({
+
+  const raw = await client.readContract({
     address: marketplaceAddress(),
-    functionName: 'get_escrow',
+    functionName: "get_escrow_json",
     args: [escrowId],
-  }) as Promise<Escrow>;
+  });
+
+  return (typeof raw === "string" ? JSON.parse(raw) : raw) as unknown as Escrow;
 }
 
 // ---------------------------------------------------------------------------
@@ -266,10 +288,12 @@ export async function callContractMethod(
   args: unknown[]
 ): Promise<unknown> {
   const client = createReadClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return client.readContract({
     address: address as `0x${string}`,
     functionName,
-    args,
+    args: args as any,
   });
 }
+
 
