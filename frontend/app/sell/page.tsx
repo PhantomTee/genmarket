@@ -74,12 +74,18 @@ export default function SellPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sourceCode }),
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(`Backend did not return JSON. Response: ${text.slice(0, 200)}`);
+      }
       if (data.passed) {
         setLintStatus('passed');
       } else {
         setLintStatus('failed');
-        setLintOutput(data.stdout || data.stderr || data.summary || 'Lint failed - check server logs');
+        setLintOutput(data.stdout || data.stderr || data.summary || data.error || 'Lint failed - check server logs');
       }
     } catch (e: any) {
       setLintStatus('failed');
