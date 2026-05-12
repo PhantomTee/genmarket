@@ -51,6 +51,7 @@ export default function SellPage() {
   const [encryptionKey, setEncryptionKey] = useState<string | null>(null);
   const [ipfsCid, setIpfsCid] = useState<string | null>(null);
   const [listingId, setListingId] = useState<string | null>(null);
+  const [chainListingId, setChainListingId] = useState<string | null>(null);
 
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -221,11 +222,11 @@ export default function SellPage() {
   }
 
   async function handleCreateListing() {
-    if (!writeClient || !ipfsCid) return;
+    if (!writeClient || !ipfsCid || !listingId) return;
     setSubmitting(true);
     setError(null);
     try {
-      await createListing(writeClient, {
+      const chainId = await createListing(writeClient, {
         title: form.title,
         description: form.description,
         price: parseGEN(form.priceGEN),
@@ -233,6 +234,18 @@ export default function SellPage() {
         demo_contract_address: form.demo_contract_address,
         ipfs_cid: ipfsCid,
       });
+      // Link the backend UUID to the on-chain integer id
+      if (chainId) {
+        await fetch(
+          `${process.env.NEXT_PUBLIC_BACKEND_URL ?? ''}/api/listings/${listingId}/chain-id`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chain_listing_id: chainId }),
+          }
+        );
+        setChainListingId(chainId);
+      }
       // Clear all drafts only after successful publish
       localStorage.removeItem(DRAFT_KEY);
       localStorage.removeItem(FORM_DRAFT_KEY);
@@ -612,8 +625,8 @@ export default function SellPage() {
               <div className="w-16 h-16 bg-emerald-100 rounded-3xl flex items-center justify-center text-3xl">✓</div>
               <h1 className="text-2xl font-bold text-neutral-900">Listing published!</h1>
               <p className="text-sm text-neutral-500">Your contract is now live on GenMarket.</p>
-              {listingId && (
-                <Link href={`/listing/${listingId}`}
+              {(chainListingId ?? listingId) && (
+                <Link href={`/listing/${chainListingId ?? listingId}`}
                   className="bg-neutral-900 text-[#F7F4EF] font-semibold px-8 py-3 rounded-full hover:bg-neutral-700 transition-colors text-sm">
                   View your listing →
                 </Link>

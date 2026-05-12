@@ -320,16 +320,20 @@ export default function InteractClient({ id }: Props) {
 
   useEffect(() => { fetchListing(); }, [fetchListing]);
 
-  // Load ABI once listing is available and has a demo address
-  useEffect(() => {
-    if (!listing?.demo_contract_address || listing.demo_contract_address === 'pending') return;
+  const loadAbi = useCallback((address: string) => {
     setLoadingAbi(true);
     setAbiError(null);
-    getContractABI(listing.demo_contract_address)
+    getContractABI(address)
       .then(setAbi)
       .catch((e) => setAbiError(e.message))
       .finally(() => setLoadingAbi(false));
-  }, [listing?.demo_contract_address]);
+  }, []);
+
+  // Load ABI once listing is available and has a demo address
+  useEffect(() => {
+    if (!listing?.demo_contract_address || listing.demo_contract_address === 'pending') return;
+    loadAbi(listing.demo_contract_address);
+  }, [listing?.demo_contract_address, loadAbi]);
 
   // Check for prior demo session
   useEffect(() => {
@@ -441,8 +445,14 @@ export default function InteractClient({ id }: Props) {
         )}
 
         {hasDemoContract && abiError && (
-          <div className="border border-red-200 bg-red-50 rounded-2xl p-4 text-sm text-red-700 mb-4">
-            Could not load contract schema: {abiError}
+          <div className="border border-red-200 bg-red-50 rounded-2xl p-4 text-sm text-red-700 mb-4 flex items-center justify-between gap-3">
+            <span>Could not load contract schema: {abiError}</span>
+            <button
+              onClick={() => listing?.demo_contract_address && loadAbi(listing.demo_contract_address)}
+              className="shrink-0 text-xs font-medium bg-white border border-red-200 text-red-700 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors"
+            >
+              ↺ Retry
+            </button>
           </div>
         )}
 
