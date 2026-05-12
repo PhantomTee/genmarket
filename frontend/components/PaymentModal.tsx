@@ -78,7 +78,8 @@ const blob = new Blob([arrayBuffer], { type: "text/x-python" });
 
       // 5. Persist purchase in localStorage so the dashboard buying tab survives refreshes
       try {
-        const stored = JSON.parse(localStorage.getItem('purchases') ?? '[]');
+        const storedRaw = JSON.parse(localStorage.getItem('purchases') ?? '[]');
+        const stored = Array.isArray(storedRaw) ? storedRaw : [];
         const updated = [
           ...stored.filter((p: any) => p.listing_id !== listingId),
           {

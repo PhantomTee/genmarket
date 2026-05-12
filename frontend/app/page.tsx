@@ -9,7 +9,8 @@ async function getFeaturedListings(): Promise<Listing[]> {
       next: { revalidate: 60 },
     });
     if (!res.ok) return [];
-    const listings: Listing[] = await res.json();
+    const data = await res.json();
+    const listings: Listing[] = Array.isArray(data) ? data : Array.isArray(data?.listings) ? data.listings : [];
     return listings.filter((l) => l.status === 'active').slice(0, 6);
   } catch {
     return [];

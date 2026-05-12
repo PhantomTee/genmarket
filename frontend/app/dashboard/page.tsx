@@ -47,7 +47,7 @@ export default function DashboardPage() {
     // Load purchase history from localStorage (persists across sessions)
     try {
       const raw = localStorage.getItem('purchases');
-      if (raw) setPurchases(JSON.parse(raw));
+      if (raw) { const p = JSON.parse(raw); setPurchases(Array.isArray(p) ? p : []); }
     } catch { /* ignore */ }
   }, [address]);
 
@@ -96,7 +96,7 @@ export default function DashboardPage() {
     try {
       await refund(writeClient, purchase.escrow_id);
       // Remove from purchases list since escrow is now refunded
-      const updated = purchases.filter((p) => p.listing_id !== purchase.listing_id);
+      const updated = (Array.isArray(purchases) ? purchases : []).filter((p) => p.listing_id !== purchase.listing_id);
       setPurchases(updated);
       try { localStorage.setItem('purchases', JSON.stringify(updated)); } catch { /* ignore */ }
       showToast('Refund processed.', 'success');
@@ -107,7 +107,7 @@ export default function DashboardPage() {
     }
   }
 
-  const totalEarnings = listings
+  const totalEarnings = (Array.isArray(listings) ? listings : [])
     .filter((l) => l.status === 'sold')
     .reduce((sum, l) => sum + l.price, 0);
 
@@ -154,7 +154,7 @@ export default function DashboardPage() {
         {/* Selling tab */}
         {tab === 'selling' && (
           <div className="flex flex-col gap-6">
-            {listings.filter((l) => l.status === 'sold').length > 0 && (
+            {(Array.isArray(listings) ? listings : []).filter((l) => l.status === 'sold').length > 0 && (
               <div className="bg-white border border-neutral-200 rounded-2xl p-5 flex items-center justify-between">
                 <div>
                   <p className="text-xs text-neutral-400 mb-1">Total earnings</p>

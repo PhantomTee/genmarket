@@ -122,7 +122,9 @@ export default function ContractPlayground({ contractAddress }: Props) {
     );
   }
 
-  if (!abi || abi.length === 0) {
+  const safeAbi = Array.isArray(abi) ? abi : [];
+
+  if (safeAbi.length === 0) {
     return (
       <div className="border border-neutral-200 rounded-2xl p-6 text-sm text-neutral-500">
         No public methods found for this contract.
@@ -130,7 +132,7 @@ export default function ContractPlayground({ contractAddress }: Props) {
     );
   }
 
-  const readMethods = abi.filter((m) => m.readonly);
+  const readMethods = safeAbi.filter((m) => m.readonly);
 
   return (
     <div className="border border-neutral-200 rounded-2xl overflow-hidden">

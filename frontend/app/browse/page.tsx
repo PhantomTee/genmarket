@@ -15,23 +15,35 @@ export default function BrowsePage() {
   const [category, setCategory] = useState('All');
 
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:4000'}/api/listings`)
-      .then((r) => r.json())
-      .then((data) => setListings(Array.isArray(data) ? data : []))
-      .catch(() => setListings([]))
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+    if (!backendUrl) { setListings([]); setLoading(false); return; }
+
+    fetch(`${backendUrl}/api/listings`)
+      .then((r) => r.text())
+      .then((text) => {
+        let data: any;
+        try { data = JSON.parse(text); } catch {
+          console.error('Invalid listings response:', text.slice(0, 300));
+          setListings([]); return;
+        }
+        if (Array.isArray(data)) setListings(data);
+        else if (Array.isArray(data?.listings)) setListings(data.listings);
+        else { console.error('Unexpected listings shape:', data); setListings([]); }
+      })
+      .catch((e) => { console.error('Failed to load listings:', e); setListings([]); })
       .finally(() => setLoading(false));
   }, []);
 
   const categoryCounts = useMemo(() => {
-    const counts: Record<string, number> = { All: listings.length };
-    for (const l of listings) {
-      counts[l.category] = (counts[l.category] ?? 0) + 1;
-    }
+    const safe = Array.isArray(listings) ? listings : [];
+    const counts: Record<string, number> = { All: safe.length };
+    for (const l of safe) counts[l.category] = (counts[l.category] ?? 0) + 1;
     return counts;
   }, [listings]);
 
   const filtered = useMemo(() => {
-    return listings.filter((l) => {
+    const safe = Array.isArray(listings) ? listings : [];
+    return safe.filter((l) => {
       const matchesCategory = category === 'All' || l.category === category;
       const q = search.toLowerCase();
       const matchesSearch =
