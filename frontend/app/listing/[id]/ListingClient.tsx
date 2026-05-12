@@ -5,7 +5,8 @@ import Link from 'next/link';
 import WalletConnect from '../../../components/WalletConnect';
 import VerdictCard, { Verdict } from '../../../components/VerdictCard';
 import PaymentModal from '../../../components/PaymentModal';
-import { Listing } from '../../../lib/genlayer';
+import { Listing, evaluateWithJudge } from '../../../lib/genlayer';
+import { useWallet } from '../../../lib/wallet-context';
 import { formatGEN } from '../../../lib/encryption';
 
 interface Props { id: string }
@@ -17,6 +18,7 @@ interface DemoSession {
 }
 
 export default function ListingClient({ id }: Props) {
+  const { writeClient, connect, connecting } = useWallet();
   const [listing, setListing] = useState<Listing | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -61,20 +63,13 @@ export default function ListingClient({ id }: Props) {
 
   async function handleEvaluate() {
     if (!requirement.trim() || !listing) return;
+    if (!writeClient) { await connect(); return; }
     setEvaluating(true);
     setVerdict(null);
     setJudgeError(null);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:4000'}/api/judge`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ listing_id: id, buyer_requirement: requirement }),
-      });
-      const text = await res.text();
-      let data: any;
-      try { data = JSON.parse(text); } catch { throw new Error(`Server error: ${text.slice(0, 200)}`); }
-      if (!res.ok) throw new Error(data.error ?? 'Evaluation failed');
-      setVerdict(data.verdict);
+      const result = await evaluateWithJudge(writeClient, listing.description, requirement);
+      setVerdict(result as Verdict);
     } catch (e: any) {
       setJudgeError(e.message);
     } finally {
@@ -246,10 +241,10 @@ export default function ListingClient({ id }: Props) {
             />
             <button
               onClick={handleEvaluate}
-              disabled={evaluating || !requirement.trim()}
+              disabled={evaluating || !requirement.trim() || connecting}
               className="bg-neutral-900 text-[#F7F4EF] font-semibold py-3 rounded-xl hover:bg-neutral-700 transition-colors disabled:opacity-50 text-sm"
             >
-              {evaluating ? 'GenLayer is thinking…' : 'Evaluate with AI'}
+              {connecting ? 'Connecting wallet…' : evaluating ? 'Waiting for GenLayer…' : writeClient ? 'Evaluate with AI' : 'Connect wallet to evaluate'}
             </button>
             {judgeError && (
               <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-3">{judgeError}</p>

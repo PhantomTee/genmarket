@@ -390,4 +390,44 @@ export async function deployContract(
   return contractAddress as `0x${string}`;
 }
 
+// ---------------------------------------------------------------------------
+// JudgeContract — buyer signs the tx with their own wallet
+// ---------------------------------------------------------------------------
 
+function judgeAddress(): `0x${string}` {
+  const addr = process.env.NEXT_PUBLIC_JUDGE_ADDRESS;
+  if (!addr) throw new Error('NEXT_PUBLIC_JUDGE_ADDRESS is not set');
+  return addr as `0x${string}`;
+}
+
+export async function evaluateWithJudge(
+  writeClient: ReturnType<typeof createClient>,
+  sellerDescription: string,
+  buyerRequirement: string
+): Promise<unknown> {
+  const txHash = await writeClient.writeContract({
+    address: judgeAddress(),
+    functionName: 'evaluate',
+    args: [sellerDescription, buyerRequirement],
+    value: 0n,
+  });
+
+  const readClient = createReadClient();
+  const receipt = await readClient.waitForTransactionReceipt({
+    hash: txHash as any,
+    status: TransactionStatus.FINALIZED,
+    interval: 3_000,
+    retries: 40,
+  });
+
+  if ((receipt as any).txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) {
+    throw new Error('Judge evaluation failed on-chain');
+  }
+
+  const verdict =
+    (receipt as any).returnValue ??
+    (receipt as any).result ??
+    null;
+
+  return typeof verdict === 'string' ? JSON.parse(verdict) : verdict;
+}
