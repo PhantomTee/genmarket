@@ -18,18 +18,30 @@ import { lintContract } from './services/lint';
 
 const app = express();
 
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://genmarketplace.vercel.app',
+  process.env.FRONTEND_URL,
+].filter(Boolean) as string[];
+
 app.use(cors({
-  origin: [
-    'http://localhost:3000',
-    'https://genmarketplace.vercel.app',
-    /\.vercel\.app$/,
-  ],
+  origin(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS blocked: ${origin}`));
+  },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: false,
 }));
 app.options('*', cors());
 app.use(express.json({ limit: '10mb' }));
+
+app.get('/health', (_req, res) => {
+  res.json({ success: true, service: 'genmarket-backend', status: 'ok' });
+});
 
 app.use('/api/listings', listingsRouter);
 app.use('/api/judge', judgeRouter);
@@ -43,6 +55,11 @@ app.post('/api/lint', (req, res) => {
     return res.status(400).json({ error: 'code must be a string' });
   }
   return res.json(lintContract(code));
+});
+
+// JSON 404 fallback — ensures backend never returns plain-text errors
+app.use((req: express.Request, res: express.Response) => {
+  res.status(404).json({ success: false, error: 'Route not found', method: req.method, path: req.path });
 });
 
 app.use(

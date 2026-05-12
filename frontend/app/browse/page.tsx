@@ -15,7 +15,7 @@ export default function BrowsePage() {
   const [category, setCategory] = useState('All');
 
   useEffect(() => {
-    fetch('/api/listings')
+    fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:4000'}/api/listings`)
       .then((r) => r.json())
       .then((data) => setListings(Array.isArray(data) ? data : []))
       .catch(() => setListings([]))

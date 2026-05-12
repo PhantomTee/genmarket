@@ -65,12 +65,14 @@ export default function ListingClient({ id }: Props) {
     setVerdict(null);
     setJudgeError(null);
     try {
-      const res = await fetch('/api/judge', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:4000'}/api/judge`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ listing_id: id, buyer_requirement: requirement }),
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data: any;
+      try { data = JSON.parse(text); } catch { throw new Error(`Server error: ${text.slice(0, 200)}`); }
       if (!res.ok) throw new Error(data.error ?? 'Evaluation failed');
       setVerdict(data.verdict);
     } catch (e: any) {
