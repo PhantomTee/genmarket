@@ -180,7 +180,7 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="flex flex-col gap-3">
-                {listings.map((l) => (
+                {(Array.isArray(listings) ? listings : []).map((l) => (
                   <div key={l.id} className="bg-white border border-neutral-200 rounded-2xl p-4 flex items-center gap-4">
                     <div className="flex-1 min-w-0">
                       <Link href={`/listing/${l.id}`} className="font-medium text-neutral-900 hover:underline line-clamp-1">
@@ -224,7 +224,7 @@ export default function DashboardPage() {
                 </Link>
               </div>
             ) : (
-              purchases.map((p) => (
+              (Array.isArray(purchases) ? purchases : []).map((p) => (
                 <div key={p.listing_id} className="bg-white border border-neutral-200 rounded-2xl p-4 flex items-center gap-3 flex-wrap sm:flex-nowrap">
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-neutral-900 line-clamp-1">{p.title}</p>
