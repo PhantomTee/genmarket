@@ -50,7 +50,7 @@ router.post('/confirm', async (req: Request, res: Response) => {
       });
     }
 
-    const dbRow = getListingById(listing_id);
+    const dbRow = await getListingById(listing_id);
     if (!dbRow) {
       return res.status(404).json({ error: 'Listing not found in database' });
     }

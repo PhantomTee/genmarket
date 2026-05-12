@@ -1,46 +1,28 @@
-import Database from 'better-sqlite3';
-import path from 'path';
+import { Pool } from 'pg';
 
-let _db: Database.Database | null = null;
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-function getDb(): Database.Database {
-  if (_db) return _db;
-  const dbPath = process.env.DATABASE_URL ?? './genmarket.db';
-  _db = new Database(path.resolve(dbPath));
-  _db.pragma('journal_mode = WAL');
-  return _db;
-}
-
-export function initDb(): void {
-  const db = getDb();
-
-  db.exec(`
+export async function initDb(): Promise<void> {
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS listings (
       listing_id     TEXT PRIMARY KEY,
       ipfs_cid       TEXT NOT NULL,
       seller_pubkey  TEXT NOT NULL,
       encryption_key TEXT NOT NULL,
-      created_at     INTEGER NOT NULL
-    );
+      created_at     BIGINT NOT NULL,
+      lint_status    TEXT,
+      lint_stdout    TEXT,
+      lint_stderr    TEXT,
+      linted_at      BIGINT
+    )
   `);
-
-  // Migration: add lint columns when they don't exist yet
-  const cols = (db.pragma('table_info(listings)') as Array<{ name: string }>).map((c) => c.name);
-  if (!cols.includes('lint_status'))  db.exec(`ALTER TABLE listings ADD COLUMN lint_status  TEXT`);
-  if (!cols.includes('lint_stdout'))  db.exec(`ALTER TABLE listings ADD COLUMN lint_stdout  TEXT`);
-  if (!cols.includes('lint_stderr'))  db.exec(`ALTER TABLE listings ADD COLUMN lint_stderr  TEXT`);
-  if (!cols.includes('linted_at'))    db.exec(`ALTER TABLE listings ADD COLUMN linted_at    INTEGER`);
 }
-
-// ---------------------------------------------------------------------------
-// Queries
-// ---------------------------------------------------------------------------
 
 export interface DbListing {
   listing_id: string;
   ipfs_cid: string;
   seller_pubkey: string;
-  encryption_key: string; // master-key-encrypted — never the raw key
+  encryption_key: string;
   created_at: number;
   lint_status?: string;
   lint_stdout?: string;
@@ -48,23 +30,15 @@ export interface DbListing {
   linted_at?: number;
 }
 
-export function insertListing(row: DbListing): void {
-  getDb()
-    .prepare(
-      `INSERT INTO listings (listing_id, ipfs_cid, seller_pubkey, encryption_key, created_at)
-       VALUES (@listing_id, @ipfs_cid, @seller_pubkey, @encryption_key, @created_at)`
-    )
-    .run(row);
+export async function insertListing(row: DbListing): Promise<void> {
+  await pool.query(
+    `INSERT INTO listings (listing_id, ipfs_cid, seller_pubkey, encryption_key, created_at)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [row.listing_id, row.ipfs_cid, row.seller_pubkey, row.encryption_key, row.created_at]
+  );
 }
 
-export function getListingById(listingId: string): DbListing | undefined {
-  return getDb()
-    .prepare('SELECT * FROM listings WHERE listing_id = ?')
-    .get(listingId) as DbListing | undefined;
-}
-
-export function getAllDbListings(): DbListing[] {
-  return getDb()
-    .prepare('SELECT * FROM listings ORDER BY created_at DESC')
-    .all() as DbListing[];
+export async function getListingById(listingId: string): Promise<DbListing | undefined> {
+  const result = await pool.query('SELECT * FROM listings WHERE listing_id = $1', [listingId]);
+  return result.rows[0] as DbListing | undefined;
 }

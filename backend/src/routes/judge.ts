@@ -17,7 +17,7 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'listing_id and buyer_requirement are required' });
     }
 
-    const dbRow = getListingById(listing_id);
+    const dbRow = await getListingById(listing_id);
     if (!dbRow) {
       return res.status(404).json({ error: 'Listing not found in database' });
     }

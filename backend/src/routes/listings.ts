@@ -38,7 +38,7 @@ router.post('/create', async (req: Request, res: Response) => {
 
     const wrappedKey = encryptKeyWithMaster(encryption_key_base64);
 
-    insertListing({
+    await insertListing({
       listing_id,
       ipfs_cid,
       seller_pubkey: seller_public_key,
@@ -86,7 +86,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     const listing = await getListing(req.params.id);
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
 
-    const dbRow = getListingById(req.params.id);
+    const dbRow = await getListingById(req.params.id);
     return res.json({ ...listing, ipfs_cid: dbRow?.ipfs_cid ?? listing.ipfs_cid });
   } catch (err: any) {
     console.error(`GET /${req.params.id} error:`, err.message);

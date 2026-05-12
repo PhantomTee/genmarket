@@ -71,7 +71,13 @@ app.use(
 
 const PORT = parseInt(process.env.PORT ?? '4000', 10);
 
-initDb();
-app.listen(PORT, () => {
-  console.log(`GenMarket backend running on port ${PORT}`);
-});
+initDb()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`GenMarket backend running on port ${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error('Failed to initialise database:', err.message);
+    process.exit(1);
+  });
