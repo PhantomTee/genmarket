@@ -45,14 +45,14 @@ export default function BrowsePage() {
   return (
     <div className="min-h-screen flex flex-col">
       {/* Nav */}
-      <nav className="flex items-center justify-between px-6 md:px-12 py-5 border-b border-neutral-200">
-        <Link href="/" className="text-xl font-bold tracking-tight text-neutral-900">
-          GenMarket<span className="text-neutral-400">.</span>
+      <nav className="flex items-center justify-between px-6 md:px-12 py-5 border-b border-neutral-200 dark:border-neutral-700">
+        <Link href="/" className="text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
+          GenMarket<span className="text-neutral-400 dark:text-neutral-500">.</span>
         </Link>
         <div className="flex items-center gap-4 sm:gap-6">
           <div className="hidden sm:flex items-center gap-6">
-            <Link href="/sell" className="text-sm text-neutral-500 hover:text-neutral-900 transition-colors">Sell</Link>
-            <Link href="/dashboard" className="text-sm text-neutral-500 hover:text-neutral-900 transition-colors">Dashboard</Link>
+            <Link href="/sell" className="text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors">Sell</Link>
+            <Link href="/dashboard" className="text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors">Dashboard</Link>
           </div>
           <WalletConnect />
         </div>
@@ -61,13 +61,13 @@ export default function BrowsePage() {
       <main className="flex-1 px-6 md:px-12 py-10 max-w-6xl mx-auto w-full">
         {/* Header + search */}
         <div className="flex flex-col md:flex-row md:items-center gap-4 mb-8">
-          <h1 className="text-3xl font-bold text-neutral-900 flex-1">Browse contracts</h1>
+          <h1 className="text-3xl font-bold text-neutral-900 dark:text-neutral-100 flex-1">Browse contracts</h1>
           <input
             type="text"
             placeholder="Search by title or description…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="border border-neutral-200 bg-white rounded-xl px-4 py-2.5 text-sm w-full md:w-72 focus:outline-none focus:border-neutral-900 transition-colors"
+            className="border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 rounded-xl px-4 py-2.5 text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500 w-full md:w-72 focus:outline-none focus:border-neutral-900 dark:focus:border-neutral-400 transition-colors"
           />
         </div>
 
@@ -81,15 +81,13 @@ export default function BrowsePage() {
                 onClick={() => setCategory(cat)}
                 className={`text-sm font-medium px-4 py-1.5 rounded-full border transition-colors flex items-center gap-1.5 ${
                   category === cat
-                    ? 'bg-neutral-900 text-[#F7F4EF] border-neutral-900'
-                    : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-400'
+                    ? 'bg-neutral-900 text-[#F7F4EF] border-neutral-900 dark:bg-neutral-100 dark:text-neutral-900 dark:border-neutral-100'
+                    : 'bg-white dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700 hover:border-neutral-400 dark:hover:border-neutral-500'
                 }`}
               >
                 {cat}
                 {!loading && (
-                  <span className={`text-xs font-normal tabular-nums ${
-                    category === cat ? 'text-neutral-400' : 'text-neutral-400'
-                  }`}>
+                  <span className="text-xs font-normal tabular-nums text-neutral-400 dark:text-neutral-500">
                     {count}
                   </span>
                 )}
@@ -102,11 +100,11 @@ export default function BrowsePage() {
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="border border-neutral-200 bg-white rounded-2xl p-5 h-52 animate-pulse" />
+              <div key={i} className="border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 rounded-2xl p-5 h-52 animate-pulse" />
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-24 text-neutral-400">
+          <div className="text-center py-24 text-neutral-400 dark:text-neutral-500">
             <p className="text-4xl mb-3">·</p>
             <p className="text-sm">No listings found{search ? ` for "${search}"` : ''}.</p>
           </div>

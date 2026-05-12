@@ -25,10 +25,10 @@ interface Props {
 
 export default function ListingCard({ listing }: Props) {
   return (
-    <div className="group border border-neutral-200 bg-white rounded-2xl p-5 flex flex-col gap-4 hover:border-neutral-900 transition-colors">
+    <div className="group border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 rounded-2xl p-5 flex flex-col gap-4 hover:border-neutral-900 dark:hover:border-neutral-400 transition-colors">
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
-        <h3 className="font-semibold text-neutral-900 text-base leading-snug line-clamp-2 flex-1">
+        <h3 className="font-semibold text-neutral-900 dark:text-neutral-100 text-base leading-snug line-clamp-2 flex-1">
           {listing.title}
         </h3>
         <span className={`shrink-0 text-xs font-medium px-2.5 py-1 rounded-full ${categoryClass(listing.category)}`}>
@@ -37,25 +37,25 @@ export default function ListingCard({ listing }: Props) {
       </div>
 
       {/* Description */}
-      <p className="text-sm text-neutral-500 line-clamp-3 leading-relaxed flex-1">
+      <p className="text-sm text-neutral-500 dark:text-neutral-400 line-clamp-3 leading-relaxed flex-1">
         {listing.description}
       </p>
 
       {/* Footer */}
-      <div className="flex items-center justify-between pt-1 border-t border-neutral-100">
+      <div className="flex items-center justify-between pt-1 border-t border-neutral-100 dark:border-neutral-800">
         <div>
-          <p className="text-xs text-neutral-400 mb-0.5">Seller</p>
-          <p className="font-mono text-xs text-neutral-600">{truncateAddress(listing.seller)}</p>
+          <p className="text-xs text-neutral-400 dark:text-neutral-500 mb-0.5">Seller</p>
+          <p className="font-mono text-xs text-neutral-600 dark:text-neutral-400">{truncateAddress(listing.seller)}</p>
         </div>
         <div className="text-right">
-          <p className="text-xs text-neutral-400 mb-0.5">Price</p>
-          <p className="font-semibold text-neutral-900 text-sm">{formatGEN(listing.price)}</p>
+          <p className="text-xs text-neutral-400 dark:text-neutral-500 mb-0.5">Price</p>
+          <p className="font-semibold text-neutral-900 dark:text-neutral-100 text-sm">{formatGEN(listing.price)}</p>
         </div>
       </div>
 
       <Link
         href={`/listing/${listing.id}`}
-        className="block w-full text-center bg-neutral-900 text-[#F7F4EF] text-sm font-medium py-2.5 rounded-xl hover:bg-neutral-700 transition-colors"
+        className="block w-full text-center bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200 text-sm font-medium py-2.5 rounded-xl hover:bg-neutral-700 transition-colors"
       >
         View Listing
       </Link>

@@ -88,7 +88,7 @@ export default function ListingClient({ id }: Props) {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-neutral-300 border-t-neutral-900 rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-neutral-300 dark:border-neutral-600 border-t-neutral-900 dark:border-t-neutral-100 rounded-full animate-spin" />
       </div>
     );
   }
@@ -96,7 +96,7 @@ export default function ListingClient({ id }: Props) {
   if (error || !listing) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-neutral-500">{error ?? 'Listing not found.'}</p>
+        <p className="text-neutral-500 dark:text-neutral-400">{error ?? 'Listing not found.'}</p>
       </div>
     );
   }
@@ -105,13 +105,13 @@ export default function ListingClient({ id }: Props) {
     listing.demo_contract_address !== 'pending';
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F7F4EF]">
-      <nav className="flex items-center justify-between px-6 md:px-12 py-5 border-b border-neutral-200 sticky top-0 bg-[#F7F4EF] z-10">
-        <Link href="/" className="text-xl font-bold tracking-tight text-neutral-900">
-          GenMarket<span className="text-neutral-400">.</span>
+    <div className="min-h-screen flex flex-col bg-[#F7F4EF] dark:bg-[#0c0c0c]">
+      <nav className="flex items-center justify-between px-6 md:px-12 py-5 border-b border-neutral-200 dark:border-neutral-700 sticky top-0 bg-[#F7F4EF] dark:bg-[#0c0c0c] z-10">
+        <Link href="/" className="text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
+          GenMarket<span className="text-neutral-400 dark:text-neutral-500">.</span>
         </Link>
         <div className="flex items-center gap-4">
-          <Link href="/browse" className="text-sm text-neutral-500 hover:text-neutral-900 transition-colors">← Browse</Link>
+          <Link href="/browse" className="text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors">← Browse</Link>
           <WalletConnect />
         </div>
       </nav>
@@ -121,21 +121,21 @@ export default function ListingClient({ id }: Props) {
         {/* Listing header */}
         <div className="mb-6">
           <div className="flex flex-wrap items-center gap-2 mb-3">
-            <span className="text-xs font-medium bg-neutral-100 text-neutral-600 px-2.5 py-1 rounded-full">
+            <span className="text-xs font-medium bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 px-2.5 py-1 rounded-full">
               {listing.category}
             </span>
             <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
               listing.status === 'active'
                 ? 'bg-emerald-100 text-emerald-700'
-                : 'bg-neutral-100 text-neutral-500'
+                : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400'
             }`}>
               {listing.status}
             </span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-neutral-900 leading-tight mb-2">
+          <h1 className="text-2xl sm:text-3xl font-bold text-neutral-900 dark:text-neutral-100 leading-tight mb-2">
             {listing.title}
           </h1>
-          <p className="text-neutral-500 text-base mb-4">{listing.description}</p>
+          <p className="text-neutral-500 dark:text-neutral-400 text-base mb-4">{listing.description}</p>
 
           {/* Trust badges */}
           <div className="flex flex-wrap gap-2">
@@ -147,14 +147,14 @@ export default function ListingClient({ id }: Props) {
                 ⬡ Demo Available
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 text-xs font-medium text-neutral-500 bg-neutral-100 border border-neutral-200 px-2.5 py-1 rounded-full">
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 px-2.5 py-1 rounded-full">
                 No Demo
               </span>
             )}
             <span className="inline-flex items-center gap-1 text-xs font-medium text-purple-700 bg-purple-50 border border-purple-200 px-2.5 py-1 rounded-full">
               ✦ AI Review
             </span>
-            <span className="inline-flex items-center gap-1 text-xs font-medium text-neutral-600 bg-neutral-100 border border-neutral-200 px-2.5 py-1 rounded-full">
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-neutral-600 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 px-2.5 py-1 rounded-full">
               🔒 Source Encrypted
             </span>
           </div>
@@ -176,12 +176,12 @@ export default function ListingClient({ id }: Props) {
 
         {/* Demo contract address pill */}
         {hasDemoContract && (
-          <div className="mb-5 flex items-center gap-2 bg-white border border-neutral-200 rounded-2xl px-4 py-3 text-xs">
-            <span className="text-neutral-400 font-medium shrink-0">Demo contract</span>
-            <span className="font-mono text-neutral-700 flex-1 truncate">{listing.demo_contract_address}</span>
+          <div className="mb-5 flex items-center gap-2 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-2xl px-4 py-3 text-xs">
+            <span className="text-neutral-400 dark:text-neutral-500 font-medium shrink-0">Demo contract</span>
+            <span className="font-mono text-neutral-700 dark:text-neutral-300 flex-1 truncate">{listing.demo_contract_address}</span>
             <button
               onClick={() => copyAddress(listing.demo_contract_address)}
-              className="shrink-0 text-neutral-400 hover:text-neutral-900 bg-neutral-50 border border-neutral-200 px-2.5 py-1.5 rounded-lg transition-colors"
+              className="shrink-0 text-neutral-400 dark:text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 px-2.5 py-1.5 rounded-lg transition-colors"
             >
               {copiedAddr ? 'Copied!' : 'Copy'}
             </button>
@@ -193,12 +193,12 @@ export default function ListingClient({ id }: Props) {
           {hasDemoContract ? (
             <Link
               href={`/listing/${id}/interact`}
-              className="w-full flex items-center justify-center gap-2 bg-neutral-900 text-[#F7F4EF] font-semibold py-4 rounded-2xl hover:bg-neutral-700 transition-colors text-sm"
+              className="w-full flex items-center justify-center gap-2 bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200 font-semibold py-4 rounded-2xl hover:bg-neutral-700 transition-colors text-sm"
             >
               Try Demo Contract →
             </Link>
           ) : (
-            <div className="w-full text-center text-sm text-neutral-400 bg-neutral-100 border border-neutral-200 py-4 rounded-2xl">
+            <div className="w-full text-center text-sm text-neutral-400 dark:text-neutral-500 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 py-4 rounded-2xl">
               No demo deployed by seller — review with AI or buy directly.
             </div>
           )}
@@ -210,14 +210,14 @@ export default function ListingClient({ id }: Props) {
               className={`flex-1 text-sm font-medium py-3 rounded-2xl border transition-colors ${
                 showJudge
                   ? 'bg-purple-50 border-purple-200 text-purple-800'
-                  : 'bg-white border-neutral-200 text-neutral-700 hover:border-neutral-400'
+                  : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:border-neutral-400 dark:hover:border-neutral-500'
               }`}
             >
               {showJudge ? 'Hide AI Judge ↑' : 'Review with AI Judge ✦'}
             </button>
             <button
               onClick={() => setShowPayment(true)}
-              className="flex-1 bg-white border border-neutral-200 text-neutral-900 font-semibold py-3 rounded-2xl hover:border-neutral-900 transition-colors text-sm"
+              className="flex-1 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-neutral-100 font-semibold py-3 rounded-2xl hover:border-neutral-900 dark:hover:border-neutral-400 transition-colors text-sm"
             >
               Buy Source · {formatGEN(listing.price)}
             </button>
@@ -228,10 +228,10 @@ export default function ListingClient({ id }: Props) {
         {showJudge && (
           <div className="flex flex-col gap-4 border border-purple-200 bg-purple-50/60 rounded-2xl p-5 mb-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-neutral-900">AI Review</h2>
+              <h2 className="text-base font-bold text-neutral-900 dark:text-neutral-100">AI Review</h2>
               <span className="text-xs text-purple-600 bg-purple-100 border border-purple-200 px-2 py-1 rounded-full">GenLayer Judge</span>
             </div>
-            <label className="text-sm text-neutral-600 font-medium">
+            <label className="text-sm text-neutral-600 dark:text-neutral-400 font-medium">
               Describe what you need this contract to do
             </label>
             <textarea
@@ -239,12 +239,12 @@ export default function ListingClient({ id }: Props) {
               onChange={(e) => setRequirement(e.target.value)}
               rows={3}
               placeholder="e.g. I need a contract that lets users stake tokens and earn rewards…"
-              className="border border-neutral-200 bg-white rounded-xl px-4 py-3 text-sm text-neutral-900 resize-none focus:outline-none focus:border-neutral-900 transition-colors"
+              className="border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 rounded-xl px-4 py-3 text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500 resize-none focus:outline-none focus:border-neutral-900 dark:focus:border-neutral-400 transition-colors"
             />
             <button
               onClick={handleEvaluate}
               disabled={evaluating || !requirement.trim() || connecting}
-              className="bg-neutral-900 text-[#F7F4EF] font-semibold py-3 rounded-xl hover:bg-neutral-700 transition-colors disabled:opacity-50 text-sm"
+              className="bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200 font-semibold py-3 rounded-xl hover:bg-neutral-700 transition-colors disabled:opacity-50 text-sm"
             >
               {connecting ? 'Connecting wallet…' : evaluating ? 'Waiting for GenLayer…' : writeClient ? 'Evaluate with AI' : 'Connect wallet to evaluate'}
             </button>
@@ -256,14 +256,14 @@ export default function ListingClient({ id }: Props) {
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowPayment(true)}
-                  className="flex-1 bg-neutral-900 text-[#F7F4EF] font-semibold py-3 rounded-xl text-sm"
+                  className="flex-1 bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200 font-semibold py-3 rounded-xl text-sm"
                 >
                   Buy Source · {formatGEN(listing.price)}
                 </button>
                 {hasDemoContract && (
                   <Link
                     href={`/listing/${id}/interact`}
-                    className="flex-1 text-center border border-neutral-200 text-neutral-700 font-medium py-3 rounded-xl text-sm hover:border-neutral-400 transition-colors"
+                    className="flex-1 text-center border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 font-medium py-3 rounded-xl text-sm hover:border-neutral-400 dark:hover:border-neutral-500 transition-colors"
                   >
                     Try demo too →
                   </Link>

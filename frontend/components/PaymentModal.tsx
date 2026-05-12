@@ -103,27 +103,27 @@ const blob = new Blob([arrayBuffer], { type: "text/x-python" });
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/40 backdrop-blur-sm">
-      <div className="bg-[#F7F4EF] border border-neutral-200 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md shadow-2xl overflow-hidden">
+      <div className="bg-[#F7F4EF] dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md shadow-2xl overflow-hidden">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-neutral-200">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-neutral-200 dark:border-neutral-700">
           <div className="flex items-center gap-3">
             {(['escrow', 'confirm', 'download'] as Step[]).map((s, i) => (
               <div key={s} className="flex items-center gap-2">
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
                   step === s
-                    ? 'bg-neutral-900 text-[#F7F4EF]'
+                    ? 'bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900'
                     : (['escrow', 'confirm', 'download'].indexOf(step) > i)
                     ? 'bg-emerald-500 text-white'
-                    : 'bg-neutral-200 text-neutral-400'
+                    : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-400 dark:text-neutral-500'
                 }`}>
                   {(['escrow', 'confirm', 'download'].indexOf(step) > i) ? '✓' : i + 1}
                 </div>
-                {i < 2 && <div className="w-6 h-px bg-neutral-200" />}
+                {i < 2 && <div className="w-6 h-px bg-neutral-200 dark:bg-neutral-700" />}
               </div>
             ))}
           </div>
-          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-900 transition-colors text-xl leading-none">
+          <button onClick={onClose} className="text-neutral-400 dark:text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors text-xl leading-none">
             ×
           </button>
         </div>
@@ -134,20 +134,20 @@ const blob = new Blob([arrayBuffer], { type: "text/x-python" });
           {step === 'escrow' && (
             <>
               <div>
-                <h2 className="text-lg font-bold text-neutral-900 mb-1">Lock payment in escrow</h2>
-                <p className="text-sm text-neutral-500">
+                <h2 className="text-lg font-bold text-neutral-900 dark:text-neutral-100 mb-1">Lock payment in escrow</h2>
+                <p className="text-sm text-neutral-500 dark:text-neutral-400">
                   Your payment is held in a smart contract. You keep control: if the code doesn&apos;t deliver, you can refund.
                 </p>
               </div>
-              <div className="bg-white border border-neutral-200 rounded-2xl p-4 flex items-center justify-between">
-                <span className="text-sm text-neutral-500">Amount</span>
-                <span className="text-xl font-bold text-neutral-900">{formatGEN(price)}</span>
+              <div className="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-2xl p-4 flex items-center justify-between">
+                <span className="text-sm text-neutral-500 dark:text-neutral-400">Amount</span>
+                <span className="text-xl font-bold text-neutral-900 dark:text-neutral-100">{formatGEN(price)}</span>
               </div>
               {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-3">{error}</p>}
               <button
                 onClick={handleLockEscrow}
                 disabled={busy}
-                className="w-full bg-neutral-900 text-[#F7F4EF] font-semibold py-3.5 rounded-2xl hover:bg-neutral-700 transition-colors disabled:opacity-50"
+                className="w-full bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200 font-semibold py-3.5 rounded-2xl hover:bg-neutral-700 transition-colors disabled:opacity-50"
               >
                 {busy ? 'Waiting for wallet…' : 'Lock in escrow'}
               </button>
@@ -158,20 +158,20 @@ const blob = new Blob([arrayBuffer], { type: "text/x-python" });
           {step === 'confirm' && (
             <>
               <div>
-                <h2 className="text-lg font-bold text-neutral-900 mb-1">Confirm your purchase</h2>
-                <p className="text-sm text-neutral-500">
+                <h2 className="text-lg font-bold text-neutral-900 dark:text-neutral-100 mb-1">Confirm your purchase</h2>
+                <p className="text-sm text-neutral-500 dark:text-neutral-400">
                   Payment is locked. Confirming releases funds to the seller and gives you the source code.
                 </p>
               </div>
-              <div className="bg-white border border-neutral-200 rounded-2xl p-4">
-                <p className="text-xs text-neutral-400 mb-1">Escrow ID</p>
-                <p className="font-mono text-xs text-neutral-700 break-all">{escrowId}</p>
+              <div className="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-2xl p-4">
+                <p className="text-xs text-neutral-400 dark:text-neutral-500 mb-1">Escrow ID</p>
+                <p className="font-mono text-xs text-neutral-700 dark:text-neutral-300 break-all">{escrowId}</p>
               </div>
               {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-3">{error}</p>}
               <button
                 onClick={handleConfirmPurchase}
                 disabled={busy}
-                className="w-full bg-neutral-900 text-[#F7F4EF] font-semibold py-3.5 rounded-2xl hover:bg-neutral-700 transition-colors disabled:opacity-50"
+                className="w-full bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200 font-semibold py-3.5 rounded-2xl hover:bg-neutral-700 transition-colors disabled:opacity-50"
               >
                 {busy ? 'Confirming…' : 'Confirm purchase'}
               </button>
@@ -183,8 +183,8 @@ const blob = new Blob([arrayBuffer], { type: "text/x-python" });
             <>
               <div>
                 <div className="w-12 h-12 bg-emerald-100 rounded-2xl flex items-center justify-center text-2xl mb-4">✓</div>
-                <h2 className="text-lg font-bold text-neutral-900 mb-1">Purchase complete</h2>
-                <p className="text-sm text-neutral-500">
+                <h2 className="text-lg font-bold text-neutral-900 dark:text-neutral-100 mb-1">Purchase complete</h2>
+                <p className="text-sm text-neutral-500 dark:text-neutral-400">
                   Your source code has been decrypted in your browser. Download it below.
                 </p>
               </div>
@@ -199,7 +199,7 @@ const blob = new Blob([arrayBuffer], { type: "text/x-python" });
               )}
               <button
                 onClick={onClose}
-                className="w-full text-center text-sm text-neutral-500 hover:text-neutral-900 transition-colors py-2"
+                className="w-full text-center text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors py-2"
               >
                 Close
               </button>

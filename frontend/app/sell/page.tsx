@@ -13,7 +13,6 @@ import { parseLintOutput, ParsedLintError } from '../../lib/lint-parser';
 const CATEGORIES = ['DeFi', 'NFT', 'DAO', 'Oracle', 'Identity', 'Utility'];
 const DRAFT_KEY = 'genmarket_contract_draft';
 const FORM_DRAFT_KEY = 'genmarket_sell_draft';
-const PROGRESS_KEY = 'genmarket_sell_progress';
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6;
 type LintStatus = 'idle' | 'linting' | 'passed' | 'failed';
@@ -67,27 +66,9 @@ export default function SellPage() {
 
   const formSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Restore form draft + progress on mount
+  // Restore form draft on mount
   useEffect(() => {
     setForm(loadFormDraft());
-    try {
-      const raw = localStorage.getItem(PROGRESS_KEY);
-      if (raw) {
-        const { step: savedStep, ipfsCid: savedCid, listingId: savedId } = JSON.parse(raw);
-        if (savedStep && savedStep > 1) {
-          if (savedCid) setIpfsCid(savedCid);
-          if (savedId) setListingId(savedId);
-          // Recreate File from saved source so step 2+ buttons stay enabled
-          const code = localStorage.getItem(DRAFT_KEY);
-          if (code) {
-            const blob = new Blob([code], { type: 'text/x-python' });
-            setSourceFile(new File([blob], 'contract.py', { type: 'text/x-python' }));
-            setSourceCode(code);
-          }
-          setStep(savedStep);
-        }
-      }
-    } catch {}
   }, []);
 
   // Prefill source from editor (sessionStorage) and persist to localStorage
@@ -113,14 +94,6 @@ export default function SellPage() {
     });
   }, [sourceFile]);
 
-  // Save step + key IDs so refresh restores the current step
-  useEffect(() => {
-    if (step === 1 || step === 6) return;
-    try {
-      localStorage.setItem(PROGRESS_KEY, JSON.stringify({ step, ipfsCid, listingId }));
-    } catch {}
-  }, [step, ipfsCid, listingId]);
-
   // Auto-save form fields to localStorage (debounced)
   function update(field: keyof FormData, value: string) {
     const next = { ...form, [field]: value };
@@ -134,7 +107,6 @@ export default function SellPage() {
   function clearDraft() {
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(FORM_DRAFT_KEY);
-    localStorage.removeItem(PROGRESS_KEY);
     setForm(defaultForm());
     setSourceFile(null);
     setSourceCode('');
@@ -277,7 +249,6 @@ export default function SellPage() {
       // Clear all drafts only after successful publish
       localStorage.removeItem(DRAFT_KEY);
       localStorage.removeItem(FORM_DRAFT_KEY);
-      localStorage.removeItem(PROGRESS_KEY);
       setStep(6);
     } catch (e: any) {
       setError(e.message);
@@ -290,12 +261,12 @@ export default function SellPage() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <nav className="flex items-center justify-between px-6 md:px-12 py-5 border-b border-neutral-200">
-        <Link href="/" className="text-xl font-bold tracking-tight text-neutral-900">
-          GenMarket<span className="text-neutral-400">.</span>
+      <nav className="flex items-center justify-between px-6 md:px-12 py-5 border-b border-neutral-200 dark:border-neutral-700">
+        <Link href="/" className="text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
+          GenMarket<span className="text-neutral-400 dark:text-neutral-500">.</span>
         </Link>
         <div className="flex items-center gap-4">
-          <Link href="/editor" className="text-sm text-neutral-500 hover:text-neutral-900 transition-colors hidden sm:block">
+          <Link href="/editor" className="text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors hidden sm:block">
             ← Editor
           </Link>
           <WalletConnect />
@@ -311,16 +282,16 @@ export default function SellPage() {
               return (
                 <div key={s} className="flex items-center gap-2 flex-1 last:flex-none">
                   <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
-                    step === s ? 'bg-neutral-900 text-[#F7F4EF]'
+                    step === s ? 'bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900'
                     : step > s ? 'bg-emerald-500 text-white'
-                    : 'bg-neutral-100 text-neutral-400'
+                    : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-400 dark:text-neutral-500'
                   }`}>
                     {step > s ? '✓' : s}
                   </div>
-                  <span className={`text-xs hidden sm:block ${step === s ? 'text-neutral-900 font-medium' : 'text-neutral-400'}`}>
+                  <span className={`text-xs hidden sm:block ${step === s ? 'text-neutral-900 dark:text-neutral-100 font-medium' : 'text-neutral-400 dark:text-neutral-500'}`}>
                     {label}
                   </span>
-                  {i < stepLabels.length - 1 && <div className="flex-1 h-px bg-neutral-200" />}
+                  {i < stepLabels.length - 1 && <div className="flex-1 h-px bg-neutral-200 dark:bg-neutral-700" />}
                 </div>
               );
             })}
@@ -336,11 +307,11 @@ export default function SellPage() {
           {step === 1 && (
             <div className="flex flex-col gap-5">
               <div className="flex items-center justify-between">
-                <h1 className="text-2xl font-bold text-neutral-900">Listing details</h1>
+                <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">Listing details</h1>
                 {(form.title || form.description || form.priceGEN) && (
                   <button
                     onClick={clearDraft}
-                    className="text-xs text-neutral-400 hover:text-red-500 transition-colors"
+                    className="text-xs text-neutral-400 dark:text-neutral-500 hover:text-red-500 transition-colors"
                   >
                     Clear draft
                   </button>
@@ -372,7 +343,7 @@ export default function SellPage() {
               <button
                 onClick={() => setStep(2)}
                 disabled={!form.title || !form.description || !form.priceGEN}
-                className="w-full bg-neutral-900 text-[#F7F4EF] font-semibold py-3.5 rounded-2xl hover:bg-neutral-700 transition-colors disabled:opacity-50"
+                className="w-full bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200 font-semibold py-3.5 rounded-2xl hover:bg-neutral-700 transition-colors disabled:opacity-50"
               >
                 Continue →
               </button>
@@ -382,25 +353,25 @@ export default function SellPage() {
           {/* Step 2 — Upload + optional lint + optional deploy demo */}
           {step === 2 && (
             <div className="flex flex-col gap-5">
-              <h1 className="text-2xl font-bold text-neutral-900">Upload source code</h1>
-              <p className="text-sm text-neutral-500">
+              <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">Upload source code</h1>
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">
                 Code is encrypted in your browser — we never see the plaintext.
                 Run lint to validate, or upload directly.
               </p>
-              <p className="text-xs text-neutral-400">
+              <p className="text-xs text-neutral-400 dark:text-neutral-500">
                 Don&apos;t have your contract ready?{' '}
-                <Link href="/editor" className="text-neutral-600 underline hover:text-neutral-900 transition-colors">
+                <Link href="/editor" className="text-neutral-600 dark:text-neutral-400 underline hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors">
                   Write it in the editor →
                 </Link>
               </p>
 
               {/* File upload */}
-              <label className="flex flex-col items-center justify-center border-2 border-dashed border-neutral-200 rounded-2xl p-10 cursor-pointer hover:border-neutral-400 transition-colors bg-white">
+              <label className="flex flex-col items-center justify-center border-2 border-dashed border-neutral-200 dark:border-neutral-700 rounded-2xl p-10 cursor-pointer hover:border-neutral-400 dark:hover:border-neutral-500 transition-colors bg-white dark:bg-neutral-900">
                 <span className="text-3xl mb-3">📄</span>
-                <span className="text-sm font-medium text-neutral-700">
+                <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
                   {sourceFile ? sourceFile.name : 'Click to upload .py file'}
                 </span>
-                <span className="text-xs text-neutral-400 mt-1">Python files only</span>
+                <span className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">Python files only</span>
                 <input
                   type="file"
                   accept=".py"
@@ -427,7 +398,7 @@ export default function SellPage() {
                     a.click();
                     URL.revokeObjectURL(url);
                   }}
-                  className="inline-flex items-center gap-2 text-sm text-neutral-600 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:text-neutral-900 px-4 py-2.5 rounded-xl transition-colors self-start"
+                  className="inline-flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 hover:border-neutral-400 dark:hover:border-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 px-4 py-2.5 rounded-xl transition-colors self-start"
                 >
                   ⬇ Download {sourceFile.name}
                 </button>
@@ -493,10 +464,10 @@ export default function SellPage() {
 
               {/* Deploy Demo section — shown after lint passes */}
               {lintStatus === 'passed' && (
-                <div className="border border-neutral-200 rounded-2xl px-4 py-4 flex flex-col gap-3 bg-white">
+                <div className="border border-neutral-200 dark:border-neutral-700 rounded-2xl px-4 py-4 flex flex-col gap-3 bg-white dark:bg-neutral-900">
                   <div>
-                    <p className="text-sm font-semibold text-neutral-800">Deploy Demo Contract <span className="font-normal text-neutral-400 text-xs">(optional)</span></p>
-                    <p className="text-xs text-neutral-500 mt-0.5">
+                    <p className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">Deploy Demo Contract <span className="font-normal text-neutral-400 dark:text-neutral-500 text-xs">(optional)</span></p>
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
                       Deploy to Studionet so buyers can test your contract before purchasing.
                       You can also enter the address manually in the next step.
                     </p>
@@ -509,7 +480,7 @@ export default function SellPage() {
                       </span>
                       <button
                         onClick={() => { const n = { ...form, demo_contract_address: '' }; setForm(n); localStorage.setItem(FORM_DRAFT_KEY, JSON.stringify(n)); }}
-                        className="text-xs text-neutral-400 hover:text-red-500 shrink-0"
+                        className="text-xs text-neutral-400 dark:text-neutral-500 hover:text-red-500 shrink-0"
                       >
                         ×
                       </button>
@@ -519,11 +490,11 @@ export default function SellPage() {
                       <button
                         onClick={handleDeployDemo}
                         disabled={deployingDemo || connecting}
-                        className="inline-flex items-center gap-2 text-sm font-medium text-neutral-900 bg-neutral-100 hover:bg-neutral-200 border border-neutral-200 px-4 py-2.5 rounded-xl transition-colors disabled:opacity-50 self-start"
+                        className="inline-flex items-center gap-2 text-sm font-medium text-neutral-900 dark:text-neutral-100 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 border border-neutral-200 dark:border-neutral-700 px-4 py-2.5 rounded-xl transition-colors disabled:opacity-50 self-start"
                       >
                         {deployingDemo ? (
                           <>
-                            <span className="w-3.5 h-3.5 border-2 border-neutral-500 border-t-transparent rounded-full animate-spin" />
+                            <span className="w-3.5 h-3.5 border-2 border-neutral-500 dark:border-neutral-400 border-t-transparent rounded-full animate-spin" />
                             Deploying…
                           </>
                         ) : connecting ? 'Connecting wallet…' : '⬆ Deploy Demo Contract'}
@@ -546,7 +517,7 @@ export default function SellPage() {
               <div className="flex gap-3">
                 <button
                   onClick={() => setStep(1)}
-                  className="flex-1 border border-neutral-200 text-neutral-700 font-medium py-3 rounded-2xl hover:border-neutral-400 transition-colors text-sm"
+                  className="flex-1 border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 font-medium py-3 rounded-2xl hover:border-neutral-400 dark:hover:border-neutral-500 transition-colors text-sm"
                 >
                   Back
                 </button>
@@ -556,7 +527,7 @@ export default function SellPage() {
                   className={`flex-1 text-sm font-medium py-3 rounded-2xl border transition-colors disabled:opacity-50 ${
                     lintStatus === 'passed'
                       ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                      : 'bg-white border-neutral-200 text-neutral-700 hover:border-neutral-400'
+                      : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:border-neutral-400 dark:hover:border-neutral-500'
                   }`}
                 >
                   {lintStatus === 'linting' ? 'Checking…' : lintStatus === 'passed' ? '✓ Lint passed' : 'Check contract'}
@@ -565,7 +536,7 @@ export default function SellPage() {
               <button
                 onClick={handleFileEncryptAndUpload}
                 disabled={uploading || !address || !sourceFile}
-                className="w-full bg-neutral-900 text-[#F7F4EF] font-semibold py-3.5 rounded-2xl hover:bg-neutral-700 transition-colors disabled:opacity-50"
+                className="w-full bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200 font-semibold py-3.5 rounded-2xl hover:bg-neutral-700 transition-colors disabled:opacity-50"
               >
                 {uploading ? 'Encrypting & uploading…' : 'Encrypt & upload →'}
               </button>
@@ -578,8 +549,8 @@ export default function SellPage() {
           {/* Step 3 — Demo address */}
           {step === 3 && (
             <div className="flex flex-col gap-5">
-              <h1 className="text-2xl font-bold text-neutral-900">Demo contract address</h1>
-              <p className="text-sm text-neutral-500">
+              <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">Demo contract address</h1>
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">
                 Paste the address of your deployed demo contract. Buyers can test it live before purchasing.
                 {form.demo_contract_address && ' (Pre-filled from your deploy above.)'}
               </p>
@@ -590,9 +561,9 @@ export default function SellPage() {
                   className="input font-mono" />
               </Field>
               <div className="flex gap-3">
-                <button onClick={() => setStep(2)} className="flex-1 border border-neutral-200 text-neutral-700 font-medium py-3 rounded-2xl text-sm">Back</button>
+                <button onClick={() => setStep(2)} className="flex-1 border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 font-medium py-3 rounded-2xl text-sm">Back</button>
                 <button onClick={() => setStep(4)} disabled={!form.demo_contract_address}
-                  className="flex-1 bg-neutral-900 text-[#F7F4EF] font-semibold py-3 rounded-2xl disabled:opacity-50">
+                  className="flex-1 bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200 font-semibold py-3 rounded-2xl disabled:opacity-50">
                   Continue →
                 </button>
               </div>
@@ -602,8 +573,8 @@ export default function SellPage() {
           {/* Step 4 — Review */}
           {step === 4 && (
             <div className="flex flex-col gap-5">
-              <h1 className="text-2xl font-bold text-neutral-900">Review listing</h1>
-              <div className="bg-white border border-neutral-200 rounded-2xl divide-y divide-neutral-100">
+              <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">Review listing</h1>
+              <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-2xl divide-y divide-neutral-100 dark:divide-neutral-800">
                 {[
                   ['Title', form.title],
                   ['Category', form.category],
@@ -612,14 +583,14 @@ export default function SellPage() {
                   ['Demo contract', form.demo_contract_address],
                 ].map(([label, value]) => (
                   <div key={label} className="flex justify-between items-start px-4 py-3 gap-4">
-                    <span className="text-sm text-neutral-400 shrink-0">{label}</span>
-                    <span className="text-sm text-neutral-900 font-mono text-right break-all">{value}</span>
+                    <span className="text-sm text-neutral-400 dark:text-neutral-500 shrink-0">{label}</span>
+                    <span className="text-sm text-neutral-900 dark:text-neutral-100 font-mono text-right break-all">{value}</span>
                   </div>
                 ))}
               </div>
               <div className="flex gap-3">
-                <button onClick={() => setStep(3)} className="flex-1 border border-neutral-200 text-neutral-700 font-medium py-3 rounded-2xl text-sm">Back</button>
-                <button onClick={() => setStep(5)} className="flex-1 bg-neutral-900 text-[#F7F4EF] font-semibold py-3 rounded-2xl">
+                <button onClick={() => setStep(3)} className="flex-1 border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 font-medium py-3 rounded-2xl text-sm">Back</button>
+                <button onClick={() => setStep(5)} className="flex-1 bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200 font-semibold py-3 rounded-2xl">
                   Looks good →
                 </button>
               </div>
@@ -629,7 +600,10 @@ export default function SellPage() {
           {/* Step 5 — Publish on-chain */}
           {step === 5 && (
             <div className="flex flex-col gap-5">
-              <h1 className="text-2xl font-bold text-neutral-900">Publish to GenLayer</h1>
+              <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">Publish to GenLayer</h1>
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                This will call <code className="font-mono text-xs bg-neutral-100 dark:bg-neutral-800 px-1 py-0.5 rounded">create_listing()</code> on the Marketplace contract from your wallet. No funds are required for this step.
+              </p>
               {!writeClient && (
                 <p className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-xl p-3">
                   Connect your wallet to publish.
@@ -638,7 +612,7 @@ export default function SellPage() {
               <button
                 onClick={handleCreateListing}
                 disabled={submitting || !writeClient}
-                className="w-full bg-neutral-900 text-[#F7F4EF] font-semibold py-3.5 rounded-2xl disabled:opacity-50"
+                className="w-full bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200 font-semibold py-3.5 rounded-2xl disabled:opacity-50"
               >
                 {submitting ? 'Waiting for wallet…' : 'Publish listing'}
               </button>
@@ -649,15 +623,15 @@ export default function SellPage() {
           {step === 6 && (
             <div className="flex flex-col items-center gap-5 text-center">
               <div className="w-16 h-16 bg-emerald-100 rounded-3xl flex items-center justify-center text-3xl">✓</div>
-              <h1 className="text-2xl font-bold text-neutral-900">Listing published!</h1>
-              <p className="text-sm text-neutral-500">Your contract is now live on GenMarket.</p>
+              <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">Listing published!</h1>
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">Your contract is now live on GenMarket.</p>
               {(chainListingId ?? listingId) && (
                 <Link href={`/listing/${chainListingId ?? listingId}`}
-                  className="bg-neutral-900 text-[#F7F4EF] font-semibold px-8 py-3 rounded-full hover:bg-neutral-700 transition-colors text-sm">
+                  className="bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200 font-semibold px-8 py-3 rounded-full hover:bg-neutral-700 transition-colors text-sm">
                   View your listing →
                 </Link>
               )}
-              <Link href="/dashboard" className="text-sm text-neutral-400 hover:text-neutral-900 transition-colors">
+              <Link href="/dashboard" className="text-sm text-neutral-400 dark:text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors">
                 Go to dashboard
               </Link>
             </div>
@@ -671,7 +645,7 @@ export default function SellPage() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-sm font-medium text-neutral-700">{label}</label>
+      <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300">{label}</label>
       {children}
     </div>
   );

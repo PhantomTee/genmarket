@@ -56,27 +56,27 @@ function ArgInput({
   const t = param.type.toLowerCase();
   if (t === 'bool') {
     return (
-      <label className="flex items-center gap-2 text-sm text-neutral-700">
+      <label className="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300">
         <input
           type="checkbox"
           checked={value === 'true'}
           onChange={(e) => onChange(e.target.checked ? 'true' : 'false')}
         />
-        <span>{param.name} <span className="text-neutral-400 text-xs">({param.type})</span></span>
+        <span>{param.name} <span className="text-neutral-400 dark:text-neutral-500 text-xs">({param.type})</span></span>
       </label>
     );
   }
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-xs font-medium text-neutral-500 uppercase tracking-wide">
-        {param.name} <span className="normal-case font-normal text-neutral-400">({param.type})</span>
+      <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wide">
+        {param.name} <span className="normal-case font-normal text-neutral-400 dark:text-neutral-500">({param.type})</span>
       </label>
       <input
         type={t.includes('int') ? 'number' : 'text'}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={param.type}
-        className="border border-neutral-200 rounded-lg px-3 py-2 text-sm font-mono text-neutral-900 bg-white focus:outline-none focus:border-neutral-900 transition-colors"
+        className="border border-neutral-200 dark:border-neutral-700 rounded-lg px-3 py-2 text-sm font-mono text-neutral-900 dark:text-neutral-100 bg-white dark:bg-neutral-800 focus:outline-none focus:border-neutral-900 dark:focus:border-neutral-400 transition-colors placeholder-neutral-400 dark:placeholder-neutral-500"
       />
     </div>
   );
@@ -87,8 +87,8 @@ function ArgInput({
 function ResultPanel({ result, calling }: { result: CallResult | null; calling: boolean }) {
   if (calling) {
     return (
-      <div className="flex items-center gap-2 text-xs text-neutral-400 p-4 border border-neutral-100 rounded-xl bg-neutral-50">
-        <span className="w-3 h-3 border-2 border-neutral-300 border-t-neutral-600 rounded-full animate-spin" />
+      <div className="flex items-center gap-2 text-xs text-neutral-400 dark:text-neutral-500 p-4 border border-neutral-100 dark:border-neutral-800 rounded-xl bg-neutral-50 dark:bg-neutral-900">
+        <span className="w-3 h-3 border-2 border-neutral-300 dark:border-neutral-600 border-t-neutral-600 dark:border-t-neutral-300 rounded-full animate-spin" />
         Calling…
       </div>
     );
@@ -202,24 +202,24 @@ function MethodSection({
   if (methods.length === 0) return null;
 
   return (
-    <div className="border border-neutral-200 rounded-2xl overflow-hidden bg-white">
+    <div className="border border-neutral-200 dark:border-neutral-700 rounded-2xl overflow-hidden bg-white dark:bg-neutral-900">
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-neutral-100 bg-neutral-50">
-        <span className="text-sm font-semibold text-neutral-800">{title}</span>
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900">
+        <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">{title}</span>
         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badgeColor}`}>{badge}</span>
-        <span className="ml-auto text-xs text-neutral-400">{methods.length} method{methods.length > 1 ? 's' : ''}</span>
+        <span className="ml-auto text-xs text-neutral-400 dark:text-neutral-500">{methods.length} method{methods.length > 1 ? 's' : ''}</span>
       </div>
 
       {/* Method pills */}
-      <div className="flex flex-wrap gap-2 px-4 py-3 border-b border-neutral-100">
+      <div className="flex flex-wrap gap-2 px-4 py-3 border-b border-neutral-100 dark:border-neutral-800">
         {methods.map((m) => (
           <button
             key={m.name}
             onClick={() => selectMethod(m)}
             className={`text-xs font-mono px-3 py-1.5 rounded-full border transition-colors ${
               selected?.name === m.name
-                ? 'bg-neutral-900 text-[#F7F4EF] border-neutral-900'
-                : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-400'
+                ? 'bg-neutral-900 text-[#F7F4EF] border-neutral-900 dark:bg-neutral-100 dark:text-neutral-900 dark:border-neutral-100'
+                : 'bg-white dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700 hover:border-neutral-400 dark:hover:border-neutral-500'
             }`}
           >
             {m.name}()
@@ -246,7 +246,7 @@ function MethodSection({
           {/* GEN value input for write methods (payable) */}
           {isWrite && (
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-neutral-500 uppercase tracking-wide">
+              <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wide">
                 GEN Value <span className="normal-case font-normal">(optional, for payable)</span>
               </label>
               <input
@@ -256,7 +256,7 @@ function MethodSection({
                 value={genValue}
                 onChange={(e) => setGenValue(e.target.value)}
                 placeholder="0.0"
-                className="border border-neutral-200 rounded-lg px-3 py-2 text-sm font-mono text-neutral-900 bg-white focus:outline-none focus:border-neutral-900 transition-colors w-36"
+                className="border border-neutral-200 dark:border-neutral-700 rounded-lg px-3 py-2 text-sm font-mono text-neutral-900 dark:text-neutral-100 bg-white dark:bg-neutral-800 focus:outline-none focus:border-neutral-900 dark:focus:border-neutral-400 transition-colors w-36 placeholder-neutral-400 dark:placeholder-neutral-500"
               />
             </div>
           )}
@@ -272,8 +272,8 @@ function MethodSection({
             disabled={calling}
             className={`text-sm font-medium py-2.5 rounded-xl transition-colors disabled:opacity-50 ${
               isWrite
-                ? 'bg-neutral-900 text-[#F7F4EF] hover:bg-neutral-700'
-                : 'bg-neutral-100 text-neutral-900 hover:bg-neutral-200 border border-neutral-200'
+                ? 'bg-neutral-900 text-[#F7F4EF] hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200'
+                : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 hover:bg-neutral-200 dark:hover:bg-neutral-700 border border-neutral-200 dark:border-neutral-700'
             }`}
           >
             {calling
@@ -359,7 +359,7 @@ export default function InteractClient({ id }: Props) {
   if (loadingListing) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-neutral-300 border-t-neutral-900 rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-neutral-300 dark:border-neutral-600 border-t-neutral-900 dark:border-t-neutral-100 rounded-full animate-spin" />
       </div>
     );
   }
@@ -367,22 +367,22 @@ export default function InteractClient({ id }: Props) {
   if (listingError || !listing) {
     return (
       <div className="min-h-screen flex items-center justify-center flex-col gap-3">
-        <p className="text-neutral-500">{listingError ?? 'Listing not found.'}</p>
-        <Link href="/browse" className="text-sm text-neutral-400 hover:text-neutral-900">← Browse</Link>
+        <p className="text-neutral-500 dark:text-neutral-400">{listingError ?? 'Listing not found.'}</p>
+        <Link href="/browse" className="text-sm text-neutral-400 dark:text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100">← Browse</Link>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F7F4EF]">
-      <nav className="flex items-center justify-between px-6 md:px-12 py-5 border-b border-neutral-200 sticky top-0 bg-[#F7F4EF] z-10">
-        <Link href="/" className="text-xl font-bold tracking-tight text-neutral-900">
-          GenMarket<span className="text-neutral-400">.</span>
+    <div className="min-h-screen flex flex-col bg-[#F7F4EF] dark:bg-[#0c0c0c]">
+      <nav className="flex items-center justify-between px-6 md:px-12 py-5 border-b border-neutral-200 dark:border-neutral-700 sticky top-0 bg-[#F7F4EF] dark:bg-[#0c0c0c] z-10">
+        <Link href="/" className="text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
+          GenMarket<span className="text-neutral-400 dark:text-neutral-500">.</span>
         </Link>
         <div className="flex items-center gap-4">
           <Link
             href={`/listing/${id}`}
-            className="text-sm text-neutral-500 hover:text-neutral-900 transition-colors"
+            className="text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
           >
             ← {listing.title}
           </Link>
@@ -393,25 +393,25 @@ export default function InteractClient({ id }: Props) {
       <main className="flex-1 px-6 md:px-12 py-10 max-w-3xl mx-auto w-full">
         {/* Page header */}
         <div className="mb-8">
-          <p className="text-xs font-medium text-neutral-400 uppercase tracking-wide mb-1">Contract Demo</p>
-          <h1 className="text-2xl font-bold text-neutral-900 mb-1">{listing.title}</h1>
-          <p className="text-sm text-neutral-500 mb-4">{listing.description}</p>
+          <p className="text-xs font-medium text-neutral-400 dark:text-neutral-500 uppercase tracking-wide mb-1">Contract Demo</p>
+          <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-100 mb-1">{listing.title}</h1>
+          <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-4">{listing.description}</p>
 
           {hasDemoContract && (
-            <div className="flex items-center gap-3 bg-white border border-neutral-200 rounded-2xl px-4 py-3 text-xs">
+            <div className="flex items-center gap-3 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-2xl px-4 py-3 text-xs">
               <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-                <span className="font-medium text-neutral-400 uppercase tracking-wide text-[10px]">Demo contract</span>
-                <span className="font-mono text-neutral-700 break-all">{listing.demo_contract_address}</span>
+                <span className="font-medium text-neutral-400 dark:text-neutral-500 uppercase tracking-wide text-[10px]">Demo contract</span>
+                <span className="font-mono text-neutral-700 dark:text-neutral-300 break-all">{listing.demo_contract_address}</span>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={copyAddress}
-                  className="text-neutral-400 hover:text-neutral-900 bg-neutral-50 border border-neutral-200 px-2.5 py-1.5 rounded-lg transition-colors"
+                  className="text-neutral-400 dark:text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 px-2.5 py-1.5 rounded-lg transition-colors"
                 >
                   {copiedAddr ? 'Copied!' : 'Copy'}
                 </button>
               </div>
-              <span className="hidden sm:flex items-center gap-1 text-neutral-400 shrink-0">
+              <span className="hidden sm:flex items-center gap-1 text-neutral-400 dark:text-neutral-500 shrink-0">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                 Studionet
               </span>
@@ -429,7 +429,7 @@ export default function InteractClient({ id }: Props) {
 
         {/* No demo contract */}
         {!hasDemoContract && (
-          <div className="border border-neutral-200 rounded-2xl p-8 text-center text-sm text-neutral-500 bg-white mb-6">
+          <div className="border border-neutral-200 dark:border-neutral-700 rounded-2xl p-8 text-center text-sm text-neutral-500 dark:text-neutral-400 bg-white dark:bg-neutral-900 mb-6">
             No demo contract deployed by the seller.
             <br />
             You can still purchase the source and review with the AI judge.
@@ -438,9 +438,9 @@ export default function InteractClient({ id }: Props) {
 
         {/* ABI loading / error */}
         {hasDemoContract && loadingAbi && (
-          <div className="border border-neutral-200 rounded-2xl p-6 animate-pulse bg-white mb-4">
-            <div className="h-4 bg-neutral-100 rounded w-1/3 mb-3" />
-            <div className="h-8 bg-neutral-100 rounded w-full" />
+          <div className="border border-neutral-200 dark:border-neutral-700 rounded-2xl p-6 animate-pulse bg-white dark:bg-neutral-900 mb-4">
+            <div className="h-4 bg-neutral-100 dark:bg-neutral-800 rounded w-1/3 mb-3" />
+            <div className="h-8 bg-neutral-100 dark:bg-neutral-800 rounded w-full" />
           </div>
         )}
 
@@ -488,7 +488,7 @@ export default function InteractClient({ id }: Props) {
               />
             )}
             {abi.length === 0 && (
-              <div className="text-sm text-neutral-500 text-center py-8">
+              <div className="text-sm text-neutral-500 dark:text-neutral-400 text-center py-8">
                 No public methods found in contract schema.
               </div>
             )}
@@ -496,7 +496,7 @@ export default function InteractClient({ id }: Props) {
         )}
 
         {/* Buy CTA */}
-        <div className={`border border-neutral-200 rounded-2xl p-6 bg-white flex flex-col gap-4 ${hasTested ? 'border-emerald-200 bg-emerald-50' : ''}`}>
+        <div className={`border border-neutral-200 dark:border-neutral-700 rounded-2xl p-6 bg-white dark:bg-neutral-900 flex flex-col gap-4 ${hasTested ? 'border-emerald-200 bg-emerald-50' : ''}`}>
           {hasTested ? (
             <div>
               <p className="text-sm font-semibold text-emerald-800 mb-0.5">Demo tested. Ready to buy?</p>
@@ -504,8 +504,8 @@ export default function InteractClient({ id }: Props) {
             </div>
           ) : (
             <div>
-              <p className="text-sm font-semibold text-neutral-800 mb-0.5">Ready to purchase?</p>
-              <p className="text-xs text-neutral-500">
+              <p className="text-sm font-semibold text-neutral-800 dark:text-neutral-200 mb-0.5">Ready to purchase?</p>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">
                 {hasDemoContract
                   ? 'Try the demo above before buying. Your payment is held in escrow.'
                   : 'Your payment is held in escrow until you confirm delivery.'}
@@ -515,13 +515,13 @@ export default function InteractClient({ id }: Props) {
           <div className="flex gap-3">
             <button
               onClick={() => setShowPayment(true)}
-              className="flex-1 bg-neutral-900 text-[#F7F4EF] font-semibold py-3 rounded-2xl hover:bg-neutral-700 transition-colors text-sm"
+              className="flex-1 bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200 font-semibold py-3 rounded-2xl hover:bg-neutral-700 transition-colors text-sm"
             >
               Buy Source · {formatGEN(listing.price)}
             </button>
             <Link
               href={`/listing/${id}`}
-              className="flex-1 text-center border border-neutral-200 text-neutral-700 font-medium py-3 rounded-2xl hover:border-neutral-400 transition-colors text-sm"
+              className="flex-1 text-center border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 font-medium py-3 rounded-2xl hover:border-neutral-400 dark:hover:border-neutral-500 transition-colors text-sm"
             >
               ← Back to listing
             </Link>
