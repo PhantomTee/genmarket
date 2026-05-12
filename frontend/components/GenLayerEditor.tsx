@@ -4,6 +4,7 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import type { editor as MonacoEditor } from 'monaco-editor';
+import Link from 'next/link';
 import { lintContract, LintResult } from '../lib/lint';
 
 const MonacoEditorComponent = dynamic(() => import('@monaco-editor/react'), { ssr: false });
@@ -222,6 +223,9 @@ export default function GenLayerEditor() {
       {/* Toolbar */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-neutral-700 bg-neutral-900 shrink-0">
         <div className="flex items-center gap-3">
+          <Link href="/" className="text-sm font-bold text-neutral-100 hover:text-white transition-colors mr-1">
+            GenMarket<span className="text-neutral-500">.</span>
+          </Link>
           <span className="text-xs font-mono text-neutral-300 bg-neutral-800 border border-neutral-700 px-2.5 py-1 rounded-md">
             GenLayer Python
           </span>
