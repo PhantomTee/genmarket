@@ -1,6 +1,5 @@
 import crypto from 'crypto';
 import nacl from 'tweetnacl';
-import { encodeBase64, decodeBase64 } from 'tweetnacl-util';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12;
@@ -16,7 +15,6 @@ function getMasterKey(): Buffer {
   return key;
 }
 
-// Encrypt an arbitrary string with the master key (AES-256-GCM).
 // Output format: base64(iv[12] + authTag[16] + ciphertext)
 export function encryptString(plainText: string): string {
   const key = getMasterKey();
@@ -27,7 +25,6 @@ export function encryptString(plainText: string): string {
   return Buffer.concat([iv, authTag, encrypted]).toString('base64');
 }
 
-// Decrypt a base64 string produced by encryptString.
 export function decryptString(encryptedBase64: string): string {
   const key = getMasterKey();
   const buf = Buffer.from(encryptedBase64, 'base64');
@@ -39,21 +36,29 @@ export function decryptString(encryptedBase64: string): string {
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
 }
 
-// Aliases used by route files (listings, payments, judge)
+// Aliases used by route files
 export const encryptKeyWithMaster = encryptString;
 export const decryptKeyWithMaster = decryptString;
 
-// Generate a fresh 32-byte random key encoded as base64
 export function generateEncryptionKeyBase64(): string {
   return crypto.randomBytes(32).toString('base64');
 }
 
 // ── Per-listing encryption (NaCl secretbox) ───────────────────────────────────
-// Must stay tweetnacl-compatible: frontend encrypts with encryptFile() in
-// frontend/lib/encryption.ts; backend decrypts here in judge.ts.
+// Must stay tweetnacl-compatible: frontend encrypts with tweetnacl, backend
+// decrypts here (judge.ts). Uses Buffer instead of tweetnacl-util to avoid
+// the CJS named-export issue in ESM mode.
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
+
+function b64encode(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString('base64');
+}
+
+function b64decode(str: string): Uint8Array {
+  return new Uint8Array(Buffer.from(str, 'base64'));
+}
 
 export function encryptForStorage(plaintext: string): {
   encryptedBase64: string;
@@ -65,12 +70,12 @@ export function encryptForStorage(plaintext: string): {
   const combined = new Uint8Array(nonce.length + box.length);
   combined.set(nonce);
   combined.set(box, nonce.length);
-  return { encryptedBase64: encodeBase64(combined), keyBase64: encodeBase64(key) };
+  return { encryptedBase64: b64encode(combined), keyBase64: b64encode(key) };
 }
 
 export function decryptFromStorage(encryptedBase64: string, keyBase64: string): string {
-  const key = decodeBase64(keyBase64);
-  const combined = decodeBase64(encryptedBase64);
+  const key = b64decode(keyBase64);
+  const combined = b64decode(encryptedBase64);
   const nonce = combined.slice(0, nacl.secretbox.nonceLength);
   const ciphertext = combined.slice(nacl.secretbox.nonceLength);
   const plaintext = nacl.secretbox.open(ciphertext, nonce, key);
