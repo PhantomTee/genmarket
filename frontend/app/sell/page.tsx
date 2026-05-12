@@ -13,6 +13,7 @@ import { parseLintOutput, ParsedLintError } from '../../lib/lint-parser';
 const CATEGORIES = ['DeFi', 'NFT', 'DAO', 'Oracle', 'Identity', 'Utility'];
 const DRAFT_KEY = 'genmarket_contract_draft';
 const FORM_DRAFT_KEY = 'genmarket_sell_draft';
+const PROGRESS_KEY = 'genmarket_sell_progress';
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6;
 type LintStatus = 'idle' | 'linting' | 'passed' | 'failed';
@@ -66,9 +67,27 @@ export default function SellPage() {
 
   const formSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Restore form draft on mount
+  // Restore form draft + progress on mount
   useEffect(() => {
     setForm(loadFormDraft());
+    try {
+      const raw = localStorage.getItem(PROGRESS_KEY);
+      if (raw) {
+        const { step: savedStep, ipfsCid: savedCid, listingId: savedId } = JSON.parse(raw);
+        if (savedStep && savedStep > 1) {
+          if (savedCid) setIpfsCid(savedCid);
+          if (savedId) setListingId(savedId);
+          // Recreate File from saved source so step 2+ buttons stay enabled
+          const code = localStorage.getItem(DRAFT_KEY);
+          if (code) {
+            const blob = new Blob([code], { type: 'text/x-python' });
+            setSourceFile(new File([blob], 'contract.py', { type: 'text/x-python' }));
+            setSourceCode(code);
+          }
+          setStep(savedStep);
+        }
+      }
+    } catch {}
   }, []);
 
   // Prefill source from editor (sessionStorage) and persist to localStorage
@@ -94,6 +113,14 @@ export default function SellPage() {
     });
   }, [sourceFile]);
 
+  // Save step + key IDs so refresh restores the current step
+  useEffect(() => {
+    if (step === 1 || step === 6) return;
+    try {
+      localStorage.setItem(PROGRESS_KEY, JSON.stringify({ step, ipfsCid, listingId }));
+    } catch {}
+  }, [step, ipfsCid, listingId]);
+
   // Auto-save form fields to localStorage (debounced)
   function update(field: keyof FormData, value: string) {
     const next = { ...form, [field]: value };
@@ -107,6 +134,7 @@ export default function SellPage() {
   function clearDraft() {
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(FORM_DRAFT_KEY);
+    localStorage.removeItem(PROGRESS_KEY);
     setForm(defaultForm());
     setSourceFile(null);
     setSourceCode('');
@@ -249,6 +277,7 @@ export default function SellPage() {
       // Clear all drafts only after successful publish
       localStorage.removeItem(DRAFT_KEY);
       localStorage.removeItem(FORM_DRAFT_KEY);
+      localStorage.removeItem(PROGRESS_KEY);
       setStep(6);
     } catch (e: any) {
       setError(e.message);
@@ -601,9 +630,6 @@ export default function SellPage() {
           {step === 5 && (
             <div className="flex flex-col gap-5">
               <h1 className="text-2xl font-bold text-neutral-900">Publish to GenLayer</h1>
-              <p className="text-sm text-neutral-500">
-                This will call <code className="font-mono text-xs bg-neutral-100 px-1 py-0.5 rounded">create_listing()</code> on the Marketplace contract from your wallet. No funds are required for this step.
-              </p>
               {!writeClient && (
                 <p className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-xl p-3">
                   Connect your wallet to publish.

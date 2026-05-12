@@ -23,6 +23,21 @@ code, pre, .font-mono {
 
 @layer components {
   .input {
-    @apply border border-neutral-200 bg-white rounded-xl px-4 py-2.5 text-sm w-full focus:outline-none focus:border-neutral-900 transition-colors;
+    @apply border border-neutral-200 bg-white rounded-xl px-4 py-2.5 text-sm w-full focus:outline-none focus:border-neutral-900 transition-colors dark:bg-neutral-800 dark:border-neutral-700 dark:text-neutral-100 dark:focus:border-neutral-400 dark:placeholder-neutral-500;
   }
+}
+
+:root {
+  --bg: #F7F4EF;
+}
+.dark {
+  --bg: #0c0c0c;
+}
+body {
+  background-color: var(--bg);
+  color-scheme: light;
+}
+.dark body {
+  color: #fafafa;
+  color-scheme: dark;
 }
