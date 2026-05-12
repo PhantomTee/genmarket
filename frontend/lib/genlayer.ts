@@ -332,7 +332,7 @@ export async function deployContract(
 
   const readClient = createReadClient();
   const receipt = await readClient.waitForTransactionReceipt({
-    hash: txHash,
+    hash: txHash as any,
     status: TransactionStatus.FINALIZED,
     interval: 3_000,
     retries: 60,
