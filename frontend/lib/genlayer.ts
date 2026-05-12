@@ -82,8 +82,26 @@ export async function connectWallet(): Promise<{
     provider: window.ethereum,
   });
 
-  // Prompt wallet to add / switch to GenLayer Studionet
-  await writeClient.connect('studionet');
+  // Prompt wallet to add / switch to GenLayer Studionet.
+  // writeClient.connect() uses MetaMask Snaps — not supported by Rabby or non-MetaMask wallets.
+  // Wrap in try/catch and fall back to wallet_addEthereumChain so Rabby still works.
+  try {
+    await writeClient.connect('studionet');
+  } catch {
+    try {
+      await window.ethereum.request({
+        method: 'wallet_addEthereumChain',
+        params: [{
+          chainId: '0xF22F', // 61999
+          chainName: 'Genlayer Studio Network',
+          rpcUrls: ['https://studio.genlayer.com/api'],
+          nativeCurrency: { name: 'GEN Token', symbol: 'GEN', decimals: 18 },
+        }],
+      });
+    } catch {
+      // Rabby / other wallets may silently handle network switching — proceed anyway
+    }
+  }
 
   return { address, writeClient };
 }
