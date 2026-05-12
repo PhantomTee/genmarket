@@ -173,6 +173,24 @@ export default function GenLayerEditor() {
       editorRef.current.setValue(initial);
     }
     runLint(initial);
+
+    // Jump to a specific error line if navigating from the sell page lint failure
+    const jumpStr = sessionStorage.getItem('genmarket_jump_to_line');
+    if (jumpStr) {
+      sessionStorage.removeItem('genmarket_jump_to_line');
+      const lineNum = parseInt(jumpStr, 10);
+      if (!isNaN(lineNum)) {
+        // Delay so Monaco has time to finish rendering
+        setTimeout(() => {
+          const editor = editorRef.current;
+          if (editor) {
+            editor.revealLineInCenter(lineNum);
+            editor.setPosition({ lineNumber: lineNum, column: 1 });
+            editor.focus();
+          }
+        }, 600);
+      }
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
