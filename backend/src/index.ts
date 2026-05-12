@@ -18,7 +18,17 @@ import { lintContract } from './services/lint';
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: [
+    'http://localhost:3000',
+    'https://genmarketplace.vercel.app',
+    /\.vercel\.app$/,
+  ],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: false,
+}));
+app.options('*', cors());
 app.use(express.json({ limit: '10mb' }));
 
 app.use('/api/listings', listingsRouter);

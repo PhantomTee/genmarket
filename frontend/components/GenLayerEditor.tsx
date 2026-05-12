@@ -129,7 +129,7 @@ function parseConstructorParams(code: string): Array<{ name: string; type: strin
   let cur = '';
   for (const ch of match[1]) {
     if ('[{('.includes(ch)) depth++;
-    else if (']})'includes(ch)) depth--;
+    else if (']})'.includes(ch)) depth--;
     else if (ch === ',' && depth === 0) { push(cur.trim(), params); cur = ''; continue; }
     cur += ch;
   }
