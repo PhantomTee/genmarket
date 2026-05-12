@@ -301,7 +301,8 @@ export async function getEscrow(escrowId: string): Promise<Escrow> {
 // ---------------------------------------------------------------------------
 
 export async function getContractABI(address: string): Promise<ABI> {
-  const res = await fetch(`/api/listings/abi?address=${encodeURIComponent(address)}`);
+  const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL ?? '';
+  const res = await fetch(`${BACKEND}/api/listings/abi?address=${encodeURIComponent(address)}`);
   if (!res.ok) throw new Error('Failed to fetch contract ABI');
   return res.json();
 }

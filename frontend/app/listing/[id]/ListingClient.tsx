@@ -33,8 +33,10 @@ export default function ListingClient({ id }: Props) {
   const [copiedAddr, setCopiedAddr] = useState(false);
   const [demoSession, setDemoSession] = useState<DemoSession | null>(null);
 
+  const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL ?? '';
+
   const fetchListing = useCallback(() => {
-    fetch(`/api/listings/${id}`)
+    fetch(`${BACKEND}/api/listings/${id}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.error) throw new Error(data.error);

@@ -307,7 +307,7 @@ export default function InteractClient({ id }: Props) {
 
   const fetchListing = useCallback(async () => {
     try {
-      const res = await fetch(`/api/listings/${id}`);
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL ?? ''}/api/listings/${id}`);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setListing(data);
