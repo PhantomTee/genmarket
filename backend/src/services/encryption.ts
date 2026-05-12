@@ -1,5 +1,8 @@
 import nacl from 'tweetnacl';
-import { encodeBase64, decodeBase64, encodeUTF8, decodeUTF8 } from 'tweetnacl-util';
+import { encodeBase64, decodeBase64 } from 'tweetnacl-util';
+
+const enc = new TextEncoder();
+const dec = new TextDecoder();
 
 function getMasterKey(): Uint8Array {
   const raw = process.env.ENCRYPTION_MASTER_KEY;
@@ -36,19 +39,19 @@ export function encryptForStorage(plaintext: string): {
   keyBase64: string;
 } {
   const key = nacl.randomBytes(nacl.secretbox.keyLength);
-  const encryptedBase64 = sealWithKey(encodeUTF8(plaintext), key);
+  const encryptedBase64 = sealWithKey(enc.encode(plaintext), key);
   return { encryptedBase64, keyBase64: encodeBase64(key) };
 }
 
 export function decryptFromStorage(encryptedBase64: string, keyBase64: string): string {
   const key = decodeBase64(keyBase64);
-  return decodeUTF8(openWithKey(encryptedBase64, key));
+  return dec.decode(openWithKey(encryptedBase64, key));
 }
 
 export function encryptKeyWithMaster(keyBase64: string): string {
-  return sealWithKey(encodeUTF8(keyBase64), getMasterKey());
+  return sealWithKey(enc.encode(keyBase64), getMasterKey());
 }
 
 export function decryptKeyWithMaster(encryptedKey: string): string {
-  return decodeUTF8(openWithKey(encryptedKey, getMasterKey()));
+  return dec.decode(openWithKey(encryptedKey, getMasterKey()));
 }
