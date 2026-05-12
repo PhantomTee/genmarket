@@ -1,32 +1,35 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import Link from 'next/link';
 import WalletConnect from '../../../components/WalletConnect';
-import ContractPlayground from '../../../components/ContractPlayground';
 import VerdictCard, { Verdict } from '../../../components/VerdictCard';
 import PaymentModal from '../../../components/PaymentModal';
 import { Listing } from '../../../lib/genlayer';
 import { formatGEN } from '../../../lib/encryption';
 
-interface Props {
-  id: string;
+interface Props { id: string }
+
+interface DemoSession {
+  timestamp: number;
+  method: string;
+  success: boolean;
 }
 
 export default function ListingClient({ id }: Props) {
-  const playgroundRef = useRef<HTMLDivElement>(null);
-
   const [listing, setListing] = useState<Listing | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [showJudge, setShowJudge] = useState(false);
   const [requirement, setRequirement] = useState('');
   const [evaluating, setEvaluating] = useState(false);
   const [verdict, setVerdict] = useState<Verdict | null>(null);
   const [judgeError, setJudgeError] = useState<string | null>(null);
 
   const [showPayment, setShowPayment] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copiedAddr, setCopiedAddr] = useState(false);
+  const [demoSession, setDemoSession] = useState<DemoSession | null>(null);
 
   const fetchListing = useCallback(() => {
     fetch(`/api/listings/${id}`)
@@ -36,27 +39,25 @@ export default function ListingClient({ id }: Props) {
         setListing(data);
         setLoading(false);
       })
-      .catch((e) => {
-        setError(e.message);
-        setLoading(false);
-      });
+      .catch((e) => { setError(e.message); setLoading(false); });
   }, [id]);
 
-  // Initial load
   useEffect(() => { fetchListing(); }, [fetchListing]);
 
-  // Auto-refresh: every 30 s while tab is visible
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (!document.hidden) fetchListing();
-    }, 30_000);
+    const interval = setInterval(() => { if (!document.hidden) fetchListing(); }, 30_000);
     const onVisible = () => { if (!document.hidden) fetchListing(); };
     document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
+    return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVisible); };
   }, [fetchListing]);
+
+  // Read prior demo session from sessionStorage
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(`genmarket_demo_test_${id}`);
+      if (raw) setDemoSession(JSON.parse(raw));
+    } catch {}
+  }, [id]);
 
   async function handleEvaluate() {
     if (!requirement.trim() || !listing) return;
@@ -79,14 +80,10 @@ export default function ListingClient({ id }: Props) {
     }
   }
 
-  function scrollToPlayground() {
-    playgroundRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
   function copyAddress(addr: string) {
     navigator.clipboard.writeText(addr);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    setCopiedAddr(true);
+    setTimeout(() => setCopiedAddr(false), 1500);
   }
 
   if (loading) {
@@ -105,8 +102,11 @@ export default function ListingClient({ id }: Props) {
     );
   }
 
+  const hasDemoContract = listing.demo_contract_address &&
+    listing.demo_contract_address !== 'pending';
+
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-[#F7F4EF]">
       <nav className="flex items-center justify-between px-6 md:px-12 py-5 border-b border-neutral-200 sticky top-0 bg-[#F7F4EF] z-10">
         <Link href="/" className="text-xl font-bold tracking-tight text-neutral-900">
           GenMarket<span className="text-neutral-400">.</span>
@@ -117,99 +117,163 @@ export default function ListingClient({ id }: Props) {
         </div>
       </nav>
 
-      <main className="flex-1 px-6 md:px-12 py-10 max-w-7xl mx-auto w-full">
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
+      <main className="flex-1 px-6 md:px-12 py-10 max-w-3xl mx-auto w-full">
+
+        {/* Listing header */}
+        <div className="mb-6">
+          <div className="flex flex-wrap items-center gap-2 mb-3">
             <span className="text-xs font-medium bg-neutral-100 text-neutral-600 px-2.5 py-1 rounded-full">
               {listing.category}
             </span>
             <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
-              listing.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-neutral-100 text-neutral-500'
+              listing.status === 'active'
+                ? 'bg-emerald-100 text-emerald-700'
+                : 'bg-neutral-100 text-neutral-500'
             }`}>
               {listing.status}
             </span>
           </div>
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-neutral-900 leading-tight mb-2">
+          <h1 className="text-2xl sm:text-3xl font-bold text-neutral-900 leading-tight mb-2">
             {listing.title}
           </h1>
-          <p className="text-neutral-500 text-base max-w-2xl">{listing.description}</p>
+          <p className="text-neutral-500 text-base mb-4">{listing.description}</p>
+
+          {/* Trust badges */}
+          <div className="flex flex-wrap gap-2">
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
+              ✓ GenVM Linted
+            </span>
+            {hasDemoContract ? (
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-full">
+                ⬡ Demo Available
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-neutral-500 bg-neutral-100 border border-neutral-200 px-2.5 py-1 rounded-full">
+                No Demo
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-purple-700 bg-purple-50 border border-purple-200 px-2.5 py-1 rounded-full">
+              ✦ AI Review
+            </span>
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-neutral-600 bg-neutral-100 border border-neutral-200 px-2.5 py-1 rounded-full">
+              🔒 Source Encrypted
+            </span>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8" ref={playgroundRef}>
-          {/* Path A */}
-          <div className="flex flex-col gap-5">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-neutral-900">Path A: Try it yourself</h2>
-              <span className="text-xs text-neutral-400">Live contract</span>
-            </div>
-            <div className="bg-white border border-neutral-200 rounded-2xl p-4">
-              <p className="text-xs text-neutral-400 mb-2 font-medium uppercase tracking-wide">Demo contract</p>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-xs text-neutral-700 flex-1 break-all">
-                  {listing.demo_contract_address}
-                </span>
-                <button
-                  onClick={() => copyAddress(listing.demo_contract_address)}
-                  className="shrink-0 text-xs text-neutral-400 hover:text-neutral-900 bg-neutral-50 border border-neutral-200 px-2.5 py-1.5 rounded-lg transition-colors"
-                >
-                  {copied ? 'Copied!' : 'Copy'}
-                </button>
-              </div>
-            </div>
-            <ContractPlayground contractAddress={listing.demo_contract_address} />
+        {/* Recent demo session banner */}
+        {demoSession && (
+          <div className={`mb-5 flex items-center gap-2 text-sm px-4 py-3 rounded-xl border ${
+            demoSession.success
+              ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+              : 'text-amber-700 bg-amber-50 border-amber-200'
+          }`}>
+            <span className="font-bold">{demoSession.success ? '✓' : '⚠'}</span>
+            You tested this demo earlier this session.
+            Last call: <span className="font-mono">{demoSession.method}()</span>
+            — {demoSession.success ? 'success' : 'failed'}.
+          </div>
+        )}
+
+        {/* Demo contract address pill */}
+        {hasDemoContract && (
+          <div className="mb-5 flex items-center gap-2 bg-white border border-neutral-200 rounded-2xl px-4 py-3 text-xs">
+            <span className="text-neutral-400 font-medium shrink-0">Demo contract</span>
+            <span className="font-mono text-neutral-700 flex-1 truncate">{listing.demo_contract_address}</span>
             <button
-              onClick={() => setShowPayment(true)}
-              className="w-full bg-neutral-900 text-[#F7F4EF] font-semibold py-3.5 rounded-2xl hover:bg-neutral-700 transition-colors"
+              onClick={() => copyAddress(listing.demo_contract_address)}
+              className="shrink-0 text-neutral-400 hover:text-neutral-900 bg-neutral-50 border border-neutral-200 px-2.5 py-1.5 rounded-lg transition-colors"
             >
-              Buy this code · {formatGEN(listing.price)}
+              {copiedAddr ? 'Copied!' : 'Copy'}
             </button>
           </div>
+        )}
 
-          {/* Path B */}
-          <div className="flex flex-col gap-5">
+        {/* Primary action: Try Demo Contract */}
+        <div className="flex flex-col gap-3 mb-6">
+          {hasDemoContract ? (
+            <Link
+              href={`/listing/${id}/interact`}
+              className="w-full flex items-center justify-center gap-2 bg-neutral-900 text-[#F7F4EF] font-semibold py-4 rounded-2xl hover:bg-neutral-700 transition-colors text-sm"
+            >
+              Try Demo Contract →
+            </Link>
+          ) : (
+            <div className="w-full text-center text-sm text-neutral-400 bg-neutral-100 border border-neutral-200 py-4 rounded-2xl">
+              No demo deployed by seller — review with AI or buy directly.
+            </div>
+          )}
+
+          {/* Secondary actions */}
+          <div className="flex gap-3">
+            <button
+              onClick={() => { setShowJudge((v) => !v); setVerdict(null); setJudgeError(null); }}
+              className={`flex-1 text-sm font-medium py-3 rounded-2xl border transition-colors ${
+                showJudge
+                  ? 'bg-purple-50 border-purple-200 text-purple-800'
+                  : 'bg-white border-neutral-200 text-neutral-700 hover:border-neutral-400'
+              }`}
+            >
+              {showJudge ? 'Hide AI Judge ↑' : 'Review with AI Judge ✦'}
+            </button>
+            <button
+              onClick={() => setShowPayment(true)}
+              className="flex-1 bg-white border border-neutral-200 text-neutral-900 font-semibold py-3 rounded-2xl hover:border-neutral-900 transition-colors text-sm"
+            >
+              Buy Source · {formatGEN(listing.price)}
+            </button>
+          </div>
+        </div>
+
+        {/* AI Judge — expandable */}
+        {showJudge && (
+          <div className="flex flex-col gap-4 border border-purple-200 bg-purple-50/60 rounded-2xl p-5 mb-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-neutral-900">Path B: Ask GenLayer</h2>
-              <span className="text-xs text-neutral-400 bg-purple-50 border border-purple-200 text-purple-600 px-2 py-1 rounded-full">AI Evaluation</span>
+              <h2 className="text-base font-bold text-neutral-900">AI Review</h2>
+              <span className="text-xs text-purple-600 bg-purple-100 border border-purple-200 px-2 py-1 rounded-full">GenLayer Judge</span>
             </div>
-            <div className="flex flex-col gap-3">
-              <label className="text-sm text-neutral-600 font-medium">
-                Describe what you need this contract to do
-              </label>
-              <textarea
-                value={requirement}
-                onChange={(e) => setRequirement(e.target.value)}
-                rows={4}
-                placeholder="e.g. I need a contract that lets users stake tokens and earn rewards proportional to their stake duration…"
-                className="border border-neutral-200 bg-white rounded-xl px-4 py-3 text-sm text-neutral-900 resize-none focus:outline-none focus:border-neutral-900 transition-colors"
-              />
-              <button
-                onClick={handleEvaluate}
-                disabled={evaluating || !requirement.trim()}
-                className="bg-neutral-900 text-[#F7F4EF] font-semibold py-3 rounded-xl hover:bg-neutral-700 transition-colors disabled:opacity-50 text-sm"
-              >
-                {evaluating ? 'GenLayer is thinking…' : 'Evaluate with AI'}
-              </button>
-            </div>
+            <label className="text-sm text-neutral-600 font-medium">
+              Describe what you need this contract to do
+            </label>
+            <textarea
+              value={requirement}
+              onChange={(e) => setRequirement(e.target.value)}
+              rows={3}
+              placeholder="e.g. I need a contract that lets users stake tokens and earn rewards…"
+              className="border border-neutral-200 bg-white rounded-xl px-4 py-3 text-sm text-neutral-900 resize-none focus:outline-none focus:border-neutral-900 transition-colors"
+            />
+            <button
+              onClick={handleEvaluate}
+              disabled={evaluating || !requirement.trim()}
+              className="bg-neutral-900 text-[#F7F4EF] font-semibold py-3 rounded-xl hover:bg-neutral-700 transition-colors disabled:opacity-50 text-sm"
+            >
+              {evaluating ? 'GenLayer is thinking…' : 'Evaluate with AI'}
+            </button>
             {judgeError && (
               <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-3">{judgeError}</p>
             )}
             <VerdictCard verdict={verdict} loading={evaluating} />
             {verdict && (
-              <button
-                onClick={scrollToPlayground}
-                className="text-sm text-neutral-400 hover:text-neutral-900 transition-colors text-left"
-              >
-                Still want to test it yourself? ↑ Try the live demo
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowPayment(true)}
+                  className="flex-1 bg-neutral-900 text-[#F7F4EF] font-semibold py-3 rounded-xl text-sm"
+                >
+                  Buy Source · {formatGEN(listing.price)}
+                </button>
+                {hasDemoContract && (
+                  <Link
+                    href={`/listing/${id}/interact`}
+                    className="flex-1 text-center border border-neutral-200 text-neutral-700 font-medium py-3 rounded-xl text-sm hover:border-neutral-400 transition-colors"
+                  >
+                    Try demo too →
+                  </Link>
+                )}
+              </div>
             )}
-            <button
-              onClick={() => setShowPayment(true)}
-              className="w-full bg-white border border-neutral-200 text-neutral-900 font-semibold py-3.5 rounded-2xl hover:border-neutral-400 transition-colors"
-            >
-              Buy this code · {formatGEN(listing.price)}
-            </button>
           </div>
-        </div>
+        )}
+
       </main>
 
       {showPayment && (

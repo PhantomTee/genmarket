@@ -301,7 +301,7 @@ export async function getEscrow(escrowId: string): Promise<Escrow> {
 // ---------------------------------------------------------------------------
 
 export async function getContractABI(address: string): Promise<ABI> {
-  const res = await fetch(`/api/contract-abi?address=${encodeURIComponent(address)}`);
+  const res = await fetch(`/api/listings/abi?address=${encodeURIComponent(address)}`);
   if (!res.ok) throw new Error('Failed to fetch contract ABI');
   return res.json();
 }
@@ -318,6 +318,43 @@ export async function callContractMethod(
     functionName,
     args: args as any,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Call a write (non-readonly) method on an arbitrary contract
+// ---------------------------------------------------------------------------
+
+export async function callWriteMethod(
+  writeClient: ReturnType<typeof createClient>,
+  address: string,
+  functionName: string,
+  args: unknown[],
+  value = 0n
+): Promise<{ txHash: string; result: unknown; receipt: unknown }> {
+  const txHash = await writeClient.writeContract({
+    address: address as `0x${string}`,
+    functionName,
+    args: args as any[],
+    value,
+  });
+
+  const readClient = createReadClient();
+  const receipt = await readClient.waitForTransactionReceipt({
+    hash: txHash as any,
+    status: TransactionStatus.FINALIZED,
+    interval: 3_000,
+    retries: 40,
+  });
+
+  if ((receipt as any).txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) {
+    throw new Error('Transaction failed on-chain');
+  }
+
+  return {
+    txHash: txHash as string,
+    result: (receipt as any).returnValue ?? null,
+    receipt,
+  };
 }
 
 // ---------------------------------------------------------------------------
