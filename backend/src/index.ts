@@ -13,6 +13,7 @@ import { initDb } from './db/schema';
 import listingsRouter from './routes/listings';
 import judgeRouter from './routes/judge';
 import paymentsRouter from './routes/payments';
+import contractsRouter from './routes/contracts';
 import { lintContract } from './services/lint';
 
 const app = express();
@@ -23,6 +24,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use('/api/listings', listingsRouter);
 app.use('/api/judge', judgeRouter);
 app.use('/api/payments', paymentsRouter);
+app.use('/api/contracts', contractsRouter);
 
 // POST /api/lint — inline, no separate router needed
 app.post('/api/lint', (req, res) => {

@@ -12,15 +12,24 @@ function getDb(): Database.Database {
 }
 
 export function initDb(): void {
-  getDb().exec(`
+  const db = getDb();
+
+  db.exec(`
     CREATE TABLE IF NOT EXISTS listings (
-      listing_id    TEXT PRIMARY KEY,
-      ipfs_cid      TEXT NOT NULL,
-      seller_pubkey TEXT NOT NULL,
+      listing_id     TEXT PRIMARY KEY,
+      ipfs_cid       TEXT NOT NULL,
+      seller_pubkey  TEXT NOT NULL,
       encryption_key TEXT NOT NULL,
-      created_at    INTEGER NOT NULL
+      created_at     INTEGER NOT NULL
     );
   `);
+
+  // Migration: add lint columns when they don't exist yet
+  const cols = (db.pragma('table_info(listings)') as Array<{ name: string }>).map((c) => c.name);
+  if (!cols.includes('lint_status'))  db.exec(`ALTER TABLE listings ADD COLUMN lint_status  TEXT`);
+  if (!cols.includes('lint_stdout'))  db.exec(`ALTER TABLE listings ADD COLUMN lint_stdout  TEXT`);
+  if (!cols.includes('lint_stderr'))  db.exec(`ALTER TABLE listings ADD COLUMN lint_stderr  TEXT`);
+  if (!cols.includes('linted_at'))    db.exec(`ALTER TABLE listings ADD COLUMN linted_at    INTEGER`);
 }
 
 // ---------------------------------------------------------------------------
@@ -33,6 +42,10 @@ export interface DbListing {
   seller_pubkey: string;
   encryption_key: string; // master-key-encrypted — never the raw key
   created_at: number;
+  lint_status?: string;
+  lint_stdout?: string;
+  lint_stderr?: string;
+  linted_at?: number;
 }
 
 export function insertListing(row: DbListing): void {

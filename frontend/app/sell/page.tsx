@@ -43,6 +43,11 @@ export default function SellPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // GenVM lint gate
+  type LintStatus = 'idle' | 'linting' | 'passed' | 'failed';
+  const [lintStatus, setLintStatus] = useState<LintStatus>('idle');
+  const [lintOutput, setLintOutput] = useState<string>('');
+
   // Prefill source from /editor if available
   useEffect(() => {
     const pending = sessionStorage.getItem('pending_source');
@@ -56,6 +61,30 @@ export default function SellPage() {
 
   function update(field: keyof FormData, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  async function handleLint() {
+    if (!sourceFile) return;
+    setLintStatus('linting');
+    setLintOutput('');
+    try {
+      const sourceCode = await sourceFile.text();
+      const res = await fetch('/api/contracts/lint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceCode }),
+      });
+      const data = await res.json();
+      if (data.passed) {
+        setLintStatus('passed');
+      } else {
+        setLintStatus('failed');
+        setLintOutput(data.stdout || data.stderr || data.summary || 'Lint failed — see server logs');
+      }
+    } catch (e: any) {
+      setLintStatus('failed');
+      setLintOutput(e.message);
+    }
   }
 
   async function handleFileEncryptAndUpload() {
@@ -195,12 +224,13 @@ export default function SellPage() {
             </div>
           )}
 
-          {/* Step 2 — Upload & encrypt source */}
+          {/* Step 2 — Lint check + encrypt source */}
           {step === 2 && (
             <div className="flex flex-col gap-5">
               <h1 className="text-2xl font-bold text-neutral-900">Upload source code</h1>
               <p className="text-sm text-neutral-500">
-                Your code is encrypted in your browser before upload. We never see the plaintext.
+                Your contract is validated with GenVM lint before upload. Code is encrypted in
+                your browser — we never see the plaintext.
               </p>
               <label className="flex flex-col items-center justify-center border-2 border-dashed border-neutral-200 rounded-2xl p-10 cursor-pointer hover:border-neutral-400 transition-colors bg-white">
                 <span className="text-3xl mb-3">📄</span>
@@ -208,20 +238,59 @@ export default function SellPage() {
                   {sourceFile ? sourceFile.name : 'Click to upload .py file'}
                 </span>
                 <span className="text-xs text-neutral-400 mt-1">Python files only</span>
-                <input type="file" accept=".py" className="hidden"
-                  onChange={(e) => setSourceFile(e.target.files?.[0] ?? null)} />
+                <input
+                  type="file"
+                  accept=".py"
+                  className="hidden"
+                  onChange={(e) => {
+                    setSourceFile(e.target.files?.[0] ?? null);
+                    setLintStatus('idle');
+                    setLintOutput('');
+                  }}
+                />
               </label>
+
+              {/* Lint feedback */}
+              {lintStatus === 'passed' && (
+                <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+                  <span className="font-bold">✓</span> Contract passed GenVM lint
+                </div>
+              )}
+              {lintStatus === 'failed' && (
+                <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+                  <p className="font-semibold mb-1">Lint failed — fix errors before uploading</p>
+                  {lintOutput && (
+                    <pre className="text-xs whitespace-pre-wrap font-mono mt-2 max-h-48 overflow-y-auto text-red-800">
+                      {lintOutput}
+                    </pre>
+                  )}
+                </div>
+              )}
+
               <div className="flex gap-3">
-                <button onClick={() => setStep(1)} className="flex-1 border border-neutral-200 text-neutral-700 font-medium py-3 rounded-2xl hover:border-neutral-400 transition-colors text-sm">
+                <button
+                  onClick={() => setStep(1)}
+                  className="flex-1 border border-neutral-200 text-neutral-700 font-medium py-3 rounded-2xl hover:border-neutral-400 transition-colors text-sm"
+                >
                   Back
                 </button>
-                <button
-                  onClick={handleFileEncryptAndUpload}
-                  disabled={!sourceFile || uploading || !address}
-                  className="flex-1 bg-neutral-900 text-[#F7F4EF] font-semibold py-3 rounded-2xl hover:bg-neutral-700 transition-colors disabled:opacity-50"
-                >
-                  {uploading ? 'Encrypting & uploading…' : 'Encrypt & upload'}
-                </button>
+                {lintStatus !== 'passed' ? (
+                  <button
+                    onClick={handleLint}
+                    disabled={!sourceFile || lintStatus === 'linting'}
+                    className="flex-1 bg-neutral-900 text-[#F7F4EF] font-semibold py-3 rounded-2xl hover:bg-neutral-700 transition-colors disabled:opacity-50"
+                  >
+                    {lintStatus === 'linting' ? 'Checking contract…' : 'Check contract'}
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleFileEncryptAndUpload}
+                    disabled={uploading || !address}
+                    className="flex-1 bg-neutral-900 text-[#F7F4EF] font-semibold py-3 rounded-2xl hover:bg-neutral-700 transition-colors disabled:opacity-50"
+                  >
+                    {uploading ? 'Encrypting & uploading…' : 'Encrypt & upload'}
+                  </button>
+                )}
               </div>
               {!address && <p className="text-xs text-amber-600 text-center">Connect your wallet first</p>}
             </div>
