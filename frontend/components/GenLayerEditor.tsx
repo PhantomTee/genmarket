@@ -4,6 +4,7 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import type { editor as MonacoEditor } from 'monaco-editor';
+import { lintContract, LintResult } from '../lib/lint';
 
 const MonacoEditorComponent = dynamic(() => import('@monaco-editor/react'), { ssr: false });
 
@@ -28,18 +29,6 @@ class MyContract(gl.Contract):
         pass
 `;
 
-interface LintItem {
-  line: number;
-  column: number;
-  message: string;
-  severity: 'error' | 'warning' | 'info';
-}
-
-interface LintResult {
-  errors: LintItem[];
-  warnings: LintItem[];
-  info: LintItem[];
-}
 
 function LintBadge({ result, linting }: { result: LintResult | null; linting: boolean }) {
   if (linting) {
@@ -144,55 +133,46 @@ export default function GenLayerEditor() {
   const [linting, setLinting] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const runLint = useCallback(async (source: string) => {
+  const runLint = useCallback((source: string) => {
     setLinting(true);
-    try {
-      const res = await fetch('/api/lint', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: source }),
-      });
-      const result: LintResult = await res.json();
-      setLintResult(result);
+    // Run synchronously in the browser — no API call, no cold-start delay
+    const result = lintContract(source);
+    setLintResult(result);
 
-      // Draw squiggles in Monaco
-      if (editorRef.current && monacoRef.current) {
-        const model = editorRef.current.getModel();
-        if (model) {
-          const markers = [
-            ...result.errors.map((e) => ({
-              severity: monacoRef.current!.MarkerSeverity.Error,
-              startLineNumber: e.line,
-              startColumn: e.column,
-              endLineNumber: e.line,
-              endColumn: 999,
-              message: e.message,
-            })),
-            ...result.warnings.map((w) => ({
-              severity: monacoRef.current!.MarkerSeverity.Warning,
-              startLineNumber: w.line,
-              startColumn: w.column,
-              endLineNumber: w.line,
-              endColumn: 999,
-              message: w.message,
-            })),
-            ...result.info.map((i) => ({
-              severity: monacoRef.current!.MarkerSeverity.Info,
-              startLineNumber: i.line,
-              startColumn: i.column,
-              endLineNumber: i.line,
-              endColumn: 999,
-              message: i.message,
-            })),
-          ];
-          monacoRef.current.editor.setModelMarkers(model, 'genlayer-lint', markers);
-        }
+    // Draw squiggles in Monaco
+    if (editorRef.current && monacoRef.current) {
+      const model = editorRef.current.getModel();
+      if (model) {
+        const markers = [
+          ...result.errors.map((e) => ({
+            severity: monacoRef.current!.MarkerSeverity.Error,
+            startLineNumber: e.line,
+            startColumn: e.column,
+            endLineNumber: e.line,
+            endColumn: 999,
+            message: e.message,
+          })),
+          ...result.warnings.map((w) => ({
+            severity: monacoRef.current!.MarkerSeverity.Warning,
+            startLineNumber: w.line,
+            startColumn: w.column,
+            endLineNumber: w.line,
+            endColumn: 999,
+            message: w.message,
+          })),
+          ...result.info.map((i) => ({
+            severity: monacoRef.current!.MarkerSeverity.Info,
+            startLineNumber: i.line,
+            startColumn: i.column,
+            endLineNumber: i.line,
+            endColumn: 999,
+            message: i.message,
+          })),
+        ];
+        monacoRef.current.editor.setModelMarkers(model, 'genlayer-lint', markers);
       }
-    } catch {
-      // lint failures are non-fatal
-    } finally {
-      setLinting(false);
     }
+    setLinting(false);
   }, []);
 
   function handleEditorChange(value: string | undefined) {
@@ -200,7 +180,7 @@ export default function GenLayerEditor() {
     setCode(src);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setLinting(true);
-    debounceRef.current = setTimeout(() => runLint(src), 800);
+    debounceRef.current = setTimeout(() => runLint(src), 400);
   }
 
   function handleEditorMount(
