@@ -7,6 +7,7 @@ import WalletConnect from '../../components/WalletConnect';
 import { useWallet } from '../../lib/wallet-context';
 import { encryptFile, parseGEN } from '../../lib/encryption';
 import { createListing } from '../../lib/genlayer';
+import { normalizePythonSource } from '../../lib/normalize';
 
 const CATEGORIES = ['DeFi', 'NFT', 'DAO', 'Oracle', 'Identity', 'Utility'];
 const DRAFT_KEY = 'genmarket_contract_draft';
@@ -84,8 +85,9 @@ export default function SellPage() {
     try {
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
       if (!backendUrl) throw new Error('NEXT_PUBLIC_BACKEND_URL is not set');
-      const src = await sourceFile.text();
-      // Persist latest content before linting so editor can restore it
+      const raw = await sourceFile.text();
+      const src = normalizePythonSource(raw);
+      // Persist normalized content before linting so editor can restore it
       setSourceCode(src);
       localStorage.setItem(DRAFT_KEY, src);
       const res = await fetch(`${backendUrl}/api/contracts/lint`, {

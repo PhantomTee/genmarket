@@ -8,6 +8,8 @@ import Link from 'next/link';
 import { lintContract, LintResult } from '../lib/lint';
 import { deployContract } from '../lib/genlayer';
 import { useWallet } from '../lib/wallet-context';
+import { useToast } from './Toast';
+import { normalizePythonSource } from '../lib/normalize';
 
 const MonacoEditorComponent = dynamic(() => import('@monaco-editor/react'), { ssr: false });
 
@@ -16,22 +18,29 @@ const DRAFT_KEY = 'genmarket_contract_draft';
 const STARTER_TEMPLATE = `# { "Depends": "py-genlayer:test" }
 
 from genlayer import *
-import json
 
-class MyContract(gl.Contract):
-    # Add your state variables here
-    result: str
+
+class HelloWorld(gl.Contract):
+    greeting: str
+    call_count: u256
 
     def __init__(self) -> None:
-        self.result = ""
+        self.greeting = "Hello from GenLayer!"
+        self.call_count = u256(0)
 
     @gl.public.view
-    def get_result(self) -> str:
-        return self.result
+    def get_greeting(self) -> str:
+        return self.greeting
+
+    @gl.public.view
+    def get_call_count(self) -> str:
+        return str(self.call_count)
 
     @gl.public.write
-    def my_method(self, input: str) -> None:
-        pass
+    def set_greeting(self, new_greeting: str) -> None:
+        assert len(new_greeting) > 0, "Greeting cannot be empty"
+        self.greeting = new_greeting
+        self.call_count += u256(1)
 `;
 
 
@@ -129,7 +138,6 @@ function LintPanel({
 
 function getInitialCode(): string {
   if (typeof window === 'undefined') return STARTER_TEMPLATE;
-  // Prefer draft coming from sell page (via sessionStorage)
   const pending = sessionStorage.getItem('pending_source');
   if (pending) {
     sessionStorage.removeItem('pending_source');
@@ -142,6 +150,7 @@ function getInitialCode(): string {
 export default function GenLayerEditor() {
   const router = useRouter();
   const { writeClient, connect, connecting } = useWallet();
+  const { showToast } = useToast();
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof import('monaco-editor') | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -156,7 +165,6 @@ export default function GenLayerEditor() {
   const [deployError, setDeployError] = useState<string | null>(null);
   const [copiedAddr, setCopiedAddr] = useState(false);
 
-  // Load draft/pending source on client mount
   useEffect(() => {
     const initial = getInitialCode();
     setCode(initial);
@@ -226,7 +234,6 @@ export default function GenLayerEditor() {
   ) {
     editorRef.current = editor;
     monacoRef.current = monaco;
-    // Initial lint runs in the useEffect after mount
   }
 
   function jumpToLine(line: number) {
@@ -242,6 +249,17 @@ export default function GenLayerEditor() {
     setTimeout(() => setCopied(false), 1500);
   }
 
+  function handleFormatCode() {
+    const cleaned = normalizePythonSource(code);
+    setCode(cleaned);
+    localStorage.setItem(DRAFT_KEY, cleaned);
+    if (editorRef.current) {
+      editorRef.current.setValue(cleaned);
+    }
+    runLint(cleaned);
+    showToast('Code spacing cleaned', 'success');
+  }
+
   function handleResetTemplate() {
     localStorage.removeItem(DRAFT_KEY);
     setCode(STARTER_TEMPLATE);
@@ -251,8 +269,9 @@ export default function GenLayerEditor() {
   }
 
   function handleUseInListing() {
-    localStorage.setItem(DRAFT_KEY, code);
-    sessionStorage.setItem('pending_source', code);
+    const cleaned = normalizePythonSource(code);
+    localStorage.setItem(DRAFT_KEY, cleaned);
+    sessionStorage.setItem('pending_source', cleaned);
     router.push('/sell');
   }
 
@@ -314,6 +333,13 @@ export default function GenLayerEditor() {
               Reset template
             </button>
           )}
+          <button
+            onClick={handleFormatCode}
+            className="hidden sm:block text-xs text-neutral-400 hover:text-neutral-100 bg-neutral-800 border border-neutral-700 px-3 py-1.5 rounded-lg transition-colors"
+            title="Clean up whitespace, tabs, and hidden characters"
+          >
+            Format code
+          </button>
           <button
             onClick={handleCopy}
             className="hidden sm:block text-xs text-neutral-400 hover:text-neutral-100 bg-neutral-800 border border-neutral-700 px-3 py-1.5 rounded-lg transition-colors"
