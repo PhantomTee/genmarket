@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
 
   const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL;
   if (!backendUrl) {
-    return Response.json({ error: 'BACKEND_URL is not configured' }, { status: 500 });
+    return NextResponse.json({ error: 'BACKEND_URL is not configured' }, { status: 500 });
   }
   const res = await fetch(`${backendUrl}/api/listings/abi?address=${encodeURIComponent(address)}`);
   const data = await res.json();

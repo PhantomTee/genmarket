@@ -396,8 +396,8 @@ export async function deployContract(
 // ---------------------------------------------------------------------------
 
 function judgeAddress(): `0x${string}` {
-  const addr = process.env.NEXT_PUBLIC_JUDGE_ADDRESS;
-  if (!addr) throw new Error('NEXT_PUBLIC_JUDGE_ADDRESS is not set');
+  const addr = process.env.NEXT_PUBLIC_JUDGE_CONTRACT_ADDRESS;
+  if (!addr) throw new Error('NEXT_PUBLIC_JUDGE_CONTRACT_ADDRESS is not set');
   return addr as `0x${string}`;
 }
 
@@ -405,7 +405,7 @@ export async function evaluateWithJudge(
   writeClient: ReturnType<typeof createClient>,
   sourceCodePreview: string,
   sellerDescription: string,
-  buyerRequirement: string
+  buyerRequirement: string,
 ): Promise<unknown> {
   const txHash = await writeClient.writeContract({
     address: judgeAddress(),
@@ -423,7 +423,15 @@ export async function evaluateWithJudge(
   });
 
   if ((receipt as any).txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) {
-    throw new Error('Judge evaluation failed on-chain');
+    const stderr =
+      (receipt as any)?.txExecutionResult?.stderr ||
+      (receipt as any)?.stderr ||
+      '';
+    throw new Error(
+      stderr
+        ? `Judge evaluation failed on-chain: ${stderr}`
+        : 'Judge evaluation failed on-chain',
+    );
   }
 
   const verdict =

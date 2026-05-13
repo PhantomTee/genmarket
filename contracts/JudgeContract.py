@@ -80,11 +80,11 @@ Respond only with the JSON object.
 """
 
         def run() -> str:
-            result = gl.exec_prompt(prompt)
+            result = gl.nondet.exec_prompt(prompt)
             result = result.replace("```json", "").replace("```", "").strip()
             return json.dumps(json.loads(result), sort_keys=True)
 
-        final = gl.eq_principle_prompt_comparative(
+        final = gl.eq_principle.prompt_comparative(
             run,
             "The verdict field must be exactly one of: match, partial, or mismatch. "
             "The confidence must be an integer between 0 and 100. "

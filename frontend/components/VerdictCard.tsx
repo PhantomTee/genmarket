@@ -57,7 +57,11 @@ export default function VerdictCard({ verdict, loading }: Props) {
   if (loading) return <LoadingSkeleton />;
   if (!verdict) return null;
 
-  const cfg = VERDICT_CONFIG[verdict.verdict];
+  const cfg =
+    VERDICT_CONFIG[verdict.verdict as keyof typeof VERDICT_CONFIG] ??
+    VERDICT_CONFIG.partial;
+
+  const caveats = verdict.caveats || [];
 
   return (
     <div className={`border ${cfg.border} ${cfg.bg} rounded-2xl p-5 flex flex-col gap-4`}>
@@ -83,13 +87,13 @@ export default function VerdictCard({ verdict, loading }: Props) {
       <p className="text-sm text-neutral-700 dark:text-neutral-300 leading-relaxed">{verdict.explanation}</p>
 
       {/* Caveats */}
-      {verdict.caveats.length > 0 && (
+      {caveats.length > 0 && (
         <div>
           <p className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wide mb-2">
             Caveats
           </p>
           <ul className="flex flex-col gap-1.5">
-            {verdict.caveats.map((c, i) => (
+            {caveats.map((c, i) => (
               <li key={i} className="flex gap-2 text-sm text-neutral-600 dark:text-neutral-400">
                 <span className="mt-0.5 shrink-0 text-neutral-400 dark:text-neutral-500">·</span>
                 <span>{c}</span>

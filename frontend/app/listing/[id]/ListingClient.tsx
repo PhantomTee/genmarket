@@ -17,6 +17,26 @@ interface DemoSession {
   success: boolean;
 }
 
+function normalizeVerdict(raw: any): Verdict {
+  const value = String(raw?.verdict || '').toLowerCase();
+  const verdict =
+    value === 'match' || value === 'partial' || value === 'mismatch'
+      ? (value as Verdict['verdict'])
+      : 'partial';
+  const confidence = Number(raw?.confidence);
+  return {
+    verdict,
+    confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(100, confidence)) : 50,
+    explanation:
+      typeof raw?.explanation === 'string'
+        ? raw.explanation
+        : 'The Judge returned an incomplete response.',
+    caveats: Array.isArray(raw?.caveats)
+      ? raw.caveats.filter((x: unknown) => typeof x === 'string')
+      : [],
+  };
+}
+
 export default function ListingClient({ id }: Props) {
   const { writeClient, connect, connecting } = useWallet();
   const [listing, setListing] = useState<Listing | null>(null);
@@ -75,15 +95,14 @@ export default function ListingClient({ id }: Props) {
         (listing as any).visible_code_preview ||
         (listing as any).code_preview ||
         listing.description ||
-        "";
-
+        '';
       const result = await evaluateWithJudge(
         writeClient,
         sourceCodePreview,
         listing.description,
-        requirement
+        requirement,
       );
-      setVerdict(result as Verdict);
+      setVerdict(normalizeVerdict(result));
     } catch (e: any) {
       setJudgeError(e.message);
     } finally {
