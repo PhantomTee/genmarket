@@ -352,10 +352,13 @@ export async function buy(
   const traced = await tryReadTxReturn(txHash as `0x${string}`);
   if (traced) return traced;
 
-  // Last fallback only. PaymentModal still verifies this with getEscrow().
+  // Last fallback only — receipt.returnValue should always be set.
+  // The contract stores: listing_id + "_" + caller.as_hex (EIP-55 mixed-case).
+  // Do NOT lowercase — return both so findValidEscrowId can check either.
   if (buyerAddress) {
-    return `${listingId}_${buyerAddress.toLowerCase()}`;
+    return `${listingId}_${buyerAddress}`;
   }
+
 
   return '';
 }
