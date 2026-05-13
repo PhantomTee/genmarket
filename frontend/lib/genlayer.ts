@@ -443,7 +443,7 @@ export async function getListingsBySeller(seller: string): Promise<Listing[]> {
   } as any);
 
   const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-  return Array.isArray(parsed) ? parsed as Listing[] : [];
+  return Array.isArray(parsed) ? (parsed as Listing[]) : [];
 }
 
 export async function getListingsByCategory(category: string): Promise<Listing[]> {
@@ -456,7 +456,7 @@ export async function getListingsByCategory(category: string): Promise<Listing[]
   } as any);
 
   const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-  return Array.isArray(parsed) ? parsed as Listing[] : [];
+  return Array.isArray(parsed) ? (parsed as Listing[]) : [];
 }
 
 export async function getEscrow(escrowId: string): Promise<Escrow> {
@@ -490,7 +490,7 @@ export async function getContractABI(address: string): Promise<ABI> {
   }
 
   const data = await res.json();
-  return Array.isArray(data) ? data as ABI : [];
+  return Array.isArray(data) ? (data as ABI) : [];
 }
 
 // ---------------------------------------------------------------------------
