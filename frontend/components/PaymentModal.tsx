@@ -72,21 +72,32 @@ export default function PaymentModal({
       new Set(
         [
           returnedEscrowId ? String(returnedEscrowId).trim() : '',
-          `${chainId}_${buyerAddress}`,
           `${chainId}_${buyerAddress.toLowerCase()}`,
+          `${chainId}_${buyerAddress}`,
           `${chainId}_${buyerAddress.replace(/^0x/i, '')}`,
           `${chainId}_${buyerAddress.toLowerCase().replace(/^0x/i, '')}`,
         ].filter(Boolean)
       )
     );
 
-    for (const candidate of candidates) {
-      const ok = await verifyEscrow(candidate, buyerAddress);
-      if (ok) return candidate;
+    // GenLayer tx finalization can take several seconds after the wallet confirms.
+    // Retry the full candidate sweep up to 4 times with a 3 s gap.
+    const MAX_ATTEMPTS = 4;
+    const DELAY_MS = 3_000;
+
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      if (attempt > 0) {
+        await new Promise((resolve) => setTimeout(resolve, DELAY_MS));
+      }
+      for (const candidate of candidates) {
+        const ok = await verifyEscrow(candidate, buyerAddress);
+        if (ok) return candidate;
+      }
     }
 
     return '';
   }
+
 
   async function handlePayIntoEscrow() {
     if (!writeClient || !address) {

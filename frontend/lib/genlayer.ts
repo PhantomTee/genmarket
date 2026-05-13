@@ -566,16 +566,29 @@ export async function getListingsByCategory(category: string): Promise<Listing[]
   return Array.isArray(parsed) ? (parsed as Listing[]) : [];
 }
 
-export async function getEscrow(escrowId: string): Promise<Escrow> {
+export async function getEscrow(escrowId: string): Promise<Escrow | null> {
   const client = createReadClient();
 
-  const raw = await client.readContract({
-    address: marketplaceAddress(),
-    functionName: 'get_escrow_json',
-    args: [escrowId],
-  } as any);
+  try {
+    const raw = await client.readContract({
+      address: marketplaceAddress(),
+      functionName: 'get_escrow_json',
+      args: [escrowId],
+    } as any);
 
-  return (typeof raw === 'string' ? JSON.parse(raw) : raw) as Escrow;
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    // Return null if the contract returned empty/null (escrow not found)
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed as Escrow;
+  } catch (err: any) {
+    // GenLayer raises 'execution failed' (Python KeyError) when the escrow ID
+    // does not exist in the contract's TreeMap. Treat this as 'not found'.
+    const msg = String(err?.message ?? '');
+    if (msg.includes('execution failed') || msg.includes('KeyError')) {
+      return null;
+    }
+    throw err;
+  }
 }
 
 // ---------------------------------------------------------------------------
