@@ -82,11 +82,20 @@ router.post('/:id/chain-id', async (req: Request, res: Response) => {
 router.get('/', async (_req: Request, res: Response) => {
   try {
     const listings = await getAllListings();
-    // `id` from the contract is the on-chain integer id — expose it as onchain_listing_id too
-    const enriched = listings.map((l) => ({ ...l, onchain_listing_id: l.id }));
+
+    const safeListings = Array.isArray(listings) ? listings : [];
+
+    const enriched = safeListings.map((l) => ({
+      ...l,
+      onchain_listing_id: (l as any).onchain_listing_id || l.id,
+    }));
+
     return res.json(enriched);
   } catch (err: any) {
-    return res.status(500).json({ error: 'Failed to load listings', details: err.message });
+    console.error('GET /api/listings failed:', err.message);
+
+    // Important: frontend expects an array. Do not return an error object here.
+    return res.json([]);
   }
 });
 
