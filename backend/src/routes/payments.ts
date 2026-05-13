@@ -10,9 +10,20 @@ const router = Router();
 // POST /api/payments/buy — tracking only, actual tx is wallet-submitted
 router.post('/buy', async (req: Request, res: Response) => {
   try {
-    const { listing_id, buyer_address } = req.body;
-    if (!listing_id || !buyer_address) return res.status(400).json({ error: 'listing_id and buyer_address are required' });
-    return res.json({ escrow_id: `${listing_id}_${buyer_address.toLowerCase()}` });
+    const { listing_id, buyer_address, escrow_id } = req.body;
+
+    if (!listing_id || !buyer_address) {
+      return res.status(400).json({
+        error: 'listing_id and buyer_address are required',
+      });
+    }
+
+    // Prefer the exact escrow_id returned by the contract/frontend.
+    // Do not manually build it from DB UUID + lowercased address.
+    return res.json({
+      escrow_id: escrow_id ? String(escrow_id) : null,
+      status: 'tracking_only',
+    });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -22,18 +33,44 @@ router.post('/buy', async (req: Request, res: Response) => {
 // Verifies escrow is locked on-chain, decrypts full source on the backend, and delivers it.
 router.post('/confirm', async (req: Request, res: Response) => {
   try {
-    const { listing_id, buyer_address } = req.body;
-    if (!listing_id || !buyer_address) return res.status(400).json({ error: 'listing_id and buyer_address are required' });
+    const { listing_id, buyer_address, escrow_id } = req.body;
 
-    const escrow_id = `${listing_id}_${buyer_address.toLowerCase()}`;
+    if (!listing_id || !buyer_address || !escrow_id) {
+      return res.status(400).json({
+        error: 'listing_id, buyer_address, and escrow_id are required',
+      });
+    }
 
-    const escrow = await getEscrow(escrow_id);
-    if (!escrow) return res.status(404).json({ error: 'Escrow not found' });
-    if (escrow.buyer.toLowerCase() !== buyer_address.toLowerCase()) return res.status(403).json({ error: 'Address mismatch: not the buyer on this escrow' });
-    if (escrow.status !== 'locked') return res.status(400).json({ error: `Escrow is not locked (current: ${escrow.status})` });
+    const finalEscrowId = String(escrow_id);
 
-    const dbRow = await getListingById(listing_id);
-    if (!dbRow) return res.status(404).json({ error: 'Listing not found in database' });
+    const escrow = await getEscrow(finalEscrowId);
+
+    if (!escrow) {
+      return res.status(404).json({ error: 'Escrow not found' });
+    }
+
+    if (
+      escrow.buyer &&
+      String(escrow.buyer).toLowerCase() !== String(buyer_address).toLowerCase()
+    ) {
+      return res.status(403).json({
+        error: 'Address mismatch: not the buyer on this escrow',
+      });
+    }
+
+    if (escrow.status !== 'locked') {
+      return res.status(400).json({
+        error: `Escrow is not locked (current: ${escrow.status})`,
+      });
+    }
+
+    const dbRow = await getListingById(String(listing_id));
+
+    if (!dbRow) {
+      return res.status(404).json({
+        error: 'Listing not found in database',
+      });
+    }
 
     // Decrypt full source on the backend — key never leaves the server
     const keyBase64 = decryptKeyWithMaster(dbRow.encryption_key);
@@ -41,28 +78,46 @@ router.post('/confirm', async (req: Request, res: Response) => {
     const sourceCode = decryptFromStorage(encryptedBase64, keyBase64);
 
     // Verify integrity
-    const verifiedHash = crypto.createHash('sha256').update(sourceCode, 'utf8').digest('hex');
+    const verifiedHash = crypto
+      .createHash('sha256')
+      .update(sourceCode, 'utf8')
+      .digest('hex');
+
+    const sourceHash = dbRow.source_hash ?? verifiedHash;
     const hashMatch = dbRow.source_hash ? verifiedHash === dbRow.source_hash : null;
 
     return res.json({
       sourceCode,
-      sourceHash: dbRow.source_hash ?? verifiedHash,
+      sourceHash,
       verifiedHash,
       hashMatch,
       ipfs_cid: dbRow.ipfs_cid,
+      escrow_id: finalEscrowId,
     });
   } catch (err: any) {
     console.error('POST /confirm error:', err.message);
-    return res.status(500).json({ error: err.message });
+
+    return res.status(500).json({
+      error: err.message,
+    });
   }
 });
 
 // POST /api/payments/refund — tracking passthrough
 router.post('/refund', async (req: Request, res: Response) => {
   try {
-    const { listing_id, buyer_address } = req.body;
-    if (!listing_id || !buyer_address) return res.status(400).json({ error: 'listing_id and buyer_address are required' });
-    return res.json({ escrow_id: `${listing_id}_${buyer_address.toLowerCase()}`, status: 'refund_initiated' });
+    const { listing_id, buyer_address, escrow_id } = req.body;
+
+    if (!listing_id || !buyer_address) {
+      return res.status(400).json({
+        error: 'listing_id and buyer_address are required',
+      });
+    }
+
+    return res.json({
+      escrow_id: escrow_id ? String(escrow_id) : null,
+      status: 'refund_initiated',
+    });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
