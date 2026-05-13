@@ -554,7 +554,6 @@ export async function evaluateWithJudge(
     status: TransactionStatus.FINALIZED,
     interval: 3_000,
     retries: 60,
-    fullTransaction: true as any,
   });
 
   console.log('Judge receipt:', receipt);
