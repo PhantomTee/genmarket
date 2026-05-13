@@ -4,7 +4,12 @@ import { v4 as uuidv4 } from 'uuid';
 import { pinContent } from '../services/ipfs.js';
 import { encryptKeyWithMaster, encryptForStorage } from '../services/encryption.js';
 import { getAllListings, getListing, getContractABI } from '../services/genlayer.js';
-import { insertListing, getListingById, getListingByChainId, updateChainListingId } from '../db/schema.js';
+import {
+  insertListing,
+  getListingByAnyId,
+  getListingByChainId,
+  updateOnchainListingId,
+} from '../db/schema.js';
 
 const router = Router();
 
@@ -32,7 +37,6 @@ router.post('/create', async (req: Request, res: Response) => {
 
     const listing_id = uuidv4();
 
-    // Encrypt full source on the backend — Pinata JWT and MASTER_KEY never leave here
     const { encryptedBase64, keyBase64 } = encryptForStorage(fullSourceCode);
     const ipfs_cid = await pinContent(encryptedBase64, `listing-${listing_id}.enc`);
     const wrappedKey = encryptKeyWithMaster(keyBase64);
@@ -61,13 +65,14 @@ router.post('/create', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/listings/:id/chain-id
+// POST /api/listings/:id/chain-id — called by frontend after on-chain create_listing tx
 router.post('/:id/chain-id', async (req: Request, res: Response) => {
   try {
-    const { chain_listing_id } = req.body;
-    if (!chain_listing_id) return res.status(400).json({ error: 'chain_listing_id is required' });
-    await updateChainListingId(req.params.id, String(chain_listing_id));
-    return res.json({ success: true });
+    const { chain_listing_id, onchain_listing_id, tx_hash } = req.body;
+    const resolvedId = onchain_listing_id ?? chain_listing_id;
+    if (!resolvedId) return res.status(400).json({ error: 'onchain_listing_id is required' });
+    await updateOnchainListingId(req.params.id, String(resolvedId), tx_hash);
+    return res.json({ success: true, onchain_listing_id: resolvedId });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -77,7 +82,9 @@ router.post('/:id/chain-id', async (req: Request, res: Response) => {
 router.get('/', async (_req: Request, res: Response) => {
   try {
     const listings = await getAllListings();
-    return res.json(listings);
+    // `id` from the contract is the on-chain integer id — expose it as onchain_listing_id too
+    const enriched = listings.map((l) => ({ ...l, onchain_listing_id: l.id }));
+    return res.json(enriched);
   } catch (err: any) {
     return res.status(500).json({ error: 'Failed to load listings', details: err.message });
   }
@@ -95,44 +102,52 @@ router.get('/abi', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/listings/:id — accepts UUID or on-chain integer id
+// GET /api/listings/:id — accepts DB UUID or on-chain integer id
 router.get('/:id', async (req: Request, res: Response) => {
+  const rawId = req.params.id;
+  console.log('GET /api/listings/:id', rawId);
   try {
-    const rawId = req.params.id;
-    let chainId = rawId;
-    let dbRow;
+    // 1. Try to find DB row by UUID or onchain_listing_id
+    let dbRow = await getListingByAnyId(rawId);
 
-    if (UUID_RE.test(rawId)) {
-      dbRow = await getListingById(rawId);
-      if (!dbRow) return res.status(404).json({ error: 'Listing not found' });
+    // 2. Determine the on-chain ID
+    let chainId: string;
 
-      if (!dbRow.chain_listing_id) {
-        // chain-id was never saved (e.g. contract returned empty) — scan on-chain by ipfs_cid
-        const all = await getAllListings();
-        const match = all.find((l) => l.ipfs_cid === dbRow!.ipfs_cid);
-        if (match) {
-          await updateChainListingId(rawId, match.id);
-          dbRow = { ...dbRow, chain_listing_id: match.id };
-        } else {
-          return res.status(404).json({ error: 'Listing not yet confirmed on-chain' });
-        }
-      }
-
-      chainId = dbRow.chain_listing_id!;
+    if (dbRow?.onchain_listing_id) {
+      chainId = dbRow.onchain_listing_id;
+    } else if (!UUID_RE.test(rawId)) {
+      // rawId is an on-chain integer id (e.g. "0") — use directly
+      chainId = rawId;
     } else {
-      dbRow = await getListingByChainId(rawId);
+      // UUID with no onchain_listing_id yet — scan on-chain by ipfs_cid
+      if (!dbRow) return res.status(404).json({ error: 'Listing not found' });
+      const all = await getAllListings();
+      const match = all.find((l) => l.ipfs_cid === dbRow!.ipfs_cid);
+      if (match) {
+        await updateOnchainListingId(dbRow.listing_id, match.id);
+        dbRow = { ...dbRow, onchain_listing_id: match.id };
+        chainId = match.id;
+      } else {
+        return res.status(404).json({ error: 'Listing not yet confirmed on-chain' });
+      }
     }
 
+    // 3. Fetch on-chain data
     const listing = await getListing(chainId);
-    if (!listing) return res.status(404).json({ error: 'Listing not found' });
+    if (!listing) return res.status(404).json({ error: 'Listing not found on-chain' });
 
+    console.log('Found listing id=%s onchain_listing_id=%s', listing.id, chainId);
+
+    // 4. Return merged response with both IDs explicit
     return res.json({
       ...listing,
+      onchain_listing_id: chainId,
       ipfs_cid:     dbRow?.ipfs_cid     ?? listing.ipfs_cid,
       preview_code: (listing as any).preview_code || dbRow?.preview_code || '',
       source_hash:  (listing as any).source_hash  || dbRow?.source_hash  || '',
     });
   } catch (err: any) {
+    console.error('GET /api/listings/:id error', rawId, err.message);
     return res.status(500).json({ error: 'Failed to load listing', details: err.message });
   }
 });

@@ -8,6 +8,7 @@ import { TransactionStatus, ExecutionResult } from 'genlayer-js/types';
 
 export interface Listing {
   id: string;
+  onchain_listing_id?: string;
   seller: string;
   title: string;
   description: string;

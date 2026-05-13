@@ -95,7 +95,12 @@ export default function ListingClient({ id }: Props) {
       .then((r) => r.json())
       .then((data) => {
         if (data.error) throw new Error(data.error);
-        setListing(data);
+        // Support both direct response and wrapped { listing: ... } shape
+        const listingData = data?.listing ?? data;
+        if (!listingData || typeof listingData !== 'object' || !listingData.id) {
+          throw new Error('Invalid listing response from backend');
+        }
+        setListing(listingData as Listing);
         setLoading(false);
       })
       .catch((e) => { setError(e.message); setLoading(false); });
@@ -366,7 +371,7 @@ export default function ListingClient({ id }: Props) {
 
       {showPayment && (
         <PaymentModal
-          listingId={listing.id}
+          listingId={listing.onchain_listing_id ?? listing.id}
           price={listing.price}
           ipfsCid={listing.ipfs_cid}
           listingTitle={listing.title}

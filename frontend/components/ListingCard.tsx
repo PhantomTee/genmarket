@@ -85,7 +85,7 @@ export default function ListingCard({ listing }: Props) {
       </div>
 
       <Link
-        href={`/listing/${listing.id}`}
+        href={`/listing/${listing.onchain_listing_id ?? listing.id}`}
         className="block w-full text-center bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200 text-sm font-medium py-2.5 rounded-xl hover:bg-neutral-700 transition-colors"
       >
         View Listing

@@ -248,7 +248,11 @@ export default function SellPage() {
       if (chainId) {
         await fetch(
           `${process.env.NEXT_PUBLIC_BACKEND_URL ?? ''}/api/listings/${listingId}/chain-id`,
-          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chain_listing_id: chainId }) }
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ onchain_listing_id: chainId }),
+          }
         );
         setChainListingId(chainId);
       }
@@ -563,8 +567,8 @@ export default function SellPage() {
               <div className="w-16 h-16 bg-emerald-100 rounded-3xl flex items-center justify-center text-3xl">✓</div>
               <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">Listing published!</h1>
               <p className="text-sm text-neutral-500 dark:text-neutral-400">Your contract is live on GenMarket. Full source is encrypted; buyers see your preview until they purchase.</p>
-              {(chainListingId ?? listingId) && (
-                <Link href={`/listing/${chainListingId ?? listingId}`}
+              {chainListingId && (
+                <Link href={`/listing/${chainListingId}`}
                   className="bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200 font-semibold px-8 py-3 rounded-full hover:bg-neutral-700 transition-colors text-sm">
                   View your listing →
                 </Link>
