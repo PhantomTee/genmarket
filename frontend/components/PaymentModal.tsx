@@ -81,9 +81,9 @@ export default function PaymentModal({
     );
 
     // GenLayer tx finalization can take several seconds after the wallet confirms.
-    // Retry the full candidate sweep up to 4 times with a 3 s gap.
-    const MAX_ATTEMPTS = 4;
-    const DELAY_MS = 3_000;
+    // Retry the full candidate sweep up to 10 times with a 5 s gap (50 s window).
+    const MAX_ATTEMPTS = 10;
+    const DELAY_MS = 5_000;
 
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       if (attempt > 0) {
