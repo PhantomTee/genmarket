@@ -104,8 +104,21 @@ router.get('/:id', async (req: Request, res: Response) => {
 
     if (UUID_RE.test(rawId)) {
       dbRow = await getListingById(rawId);
-      if (!dbRow?.chain_listing_id) return res.status(404).json({ error: 'Listing not yet linked to on-chain id' });
-      chainId = dbRow.chain_listing_id;
+      if (!dbRow) return res.status(404).json({ error: 'Listing not found' });
+
+      if (!dbRow.chain_listing_id) {
+        // chain-id was never saved (e.g. contract returned empty) — scan on-chain by ipfs_cid
+        const all = await getAllListings();
+        const match = all.find((l) => l.ipfs_cid === dbRow!.ipfs_cid);
+        if (match) {
+          await updateChainListingId(rawId, match.id);
+          dbRow = { ...dbRow, chain_listing_id: match.id };
+        } else {
+          return res.status(404).json({ error: 'Listing not yet confirmed on-chain' });
+        }
+      }
+
+      chainId = dbRow.chain_listing_id!;
     } else {
       dbRow = await getListingByChainId(rawId);
     }

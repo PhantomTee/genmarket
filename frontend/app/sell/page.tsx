@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import WalletConnect from '../../components/WalletConnect';
 import { useWallet } from '../../lib/wallet-context';
 import { parseGEN } from '../../lib/encryption';
-import { createListing, deployContract } from '../../lib/genlayer';
+import { createListing, deployContract, createReadClient } from '../../lib/genlayer';
 import { normalizePythonSource } from '../../lib/normalize';
 import { parseLintOutput, ParsedLintError } from '../../lib/lint-parser';
 
@@ -223,7 +223,7 @@ export default function SellPage() {
     setSubmitting(true);
     setError(null);
     try {
-      const chainId = await createListing(writeClient, {
+      let chainId = await createListing(writeClient, {
         title: form.title,
         description: form.description,
         price: parseGEN(form.priceGEN),
@@ -233,6 +233,18 @@ export default function SellPage() {
         preview_code: previewCode.trim(),
         source_hash: sourceHash,
       });
+
+      // If the contract didn't return the listing ID, derive it from the new count
+      if (!chainId) {
+        const readClient = createReadClient();
+        const countRaw = await readClient.readContract({
+          address: (process.env.NEXT_PUBLIC_MARKETPLACE_CONTRACT_ADDRESS ?? '') as `0x${string}`,
+          functionName: 'get_listing_count',
+          args: [],
+        });
+        chainId = String(Math.max(0, Number(countRaw) - 1));
+      }
+
       if (chainId) {
         await fetch(
           `${process.env.NEXT_PUBLIC_BACKEND_URL ?? ''}/api/listings/${listingId}/chain-id`,
