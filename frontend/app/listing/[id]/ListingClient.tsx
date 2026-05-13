@@ -371,12 +371,13 @@ export default function ListingClient({ id }: Props) {
 
       {showPayment && (
         <PaymentModal
-          listingId={listing.onchain_listing_id ?? listing.id}
-          price={listing.price}
-          ipfsCid={listing.ipfs_cid}
-          listingTitle={listing.title}
-          onClose={() => setShowPayment(false)}
-        />
+        listingId={listing.id}
+        onchainListingId={listing.onchain_listing_id}
+        price={Number(listing.price)}
+        ipfsCid={listing.ipfs_cid}
+        listingTitle={listing.title}
+        onClose={() => setShowPayment(false)}
+      />
       )}
     </div>
   );
