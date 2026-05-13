@@ -1,12 +1,13 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import fs from 'fs/promises';
+import os from 'os';
 import path from 'path';
 import { spawn } from 'child_process';
 
 const router = Router();
 
-const TMP_DIR = process.env.CONTRACT_TMP_DIR ?? '/tmp/genmarket-contracts';
+const TMP_DIR = process.env.CONTRACT_TMP_DIR ?? path.join(os.tmpdir(), 'genmarket-contracts');
 
 // ---------------------------------------------------------------------------
 // Helper: run a command with a timeout, return { code, stdout, stderr }

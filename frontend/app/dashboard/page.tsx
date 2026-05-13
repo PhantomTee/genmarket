@@ -6,8 +6,6 @@ import WalletConnect from '../../components/WalletConnect';
 import { useWallet } from '../../lib/wallet-context';
 import { getListingsBySeller, removeListing, refund, Listing } from '../../lib/genlayer';
 import { formatGEN } from '../../lib/encryption';
-import { fetchFromIPFS } from '../../lib/ipfs';
-import { decryptToBuffer } from '../../lib/encryption';
 import { useToast } from '../../components/Toast';
 
 type Tab = 'selling' | 'buying';
@@ -18,7 +16,8 @@ interface Purchase {
   price: number;
   ipfs_cid: string;
   escrow_id?: string;
-  encryption_key_base64?: string;
+  sourceCode?: string;          // stored by PaymentModal after successful purchase
+  encryption_key_base64?: string; // legacy field — may be absent
 }
 
 export default function DashboardPage() {
@@ -66,16 +65,15 @@ export default function DashboardPage() {
   }
 
   async function handleDownload(purchase: Purchase) {
-    if (!purchase.encryption_key_base64) return;
+    // Prefer the sourceCode stored directly in localStorage (set by PaymentModal)
+    const src = purchase.sourceCode;
+    if (!src) {
+      showToast('Source not available — please re-confirm the purchase.', 'error');
+      return;
+    }
     setDownloadingId(purchase.listing_id);
     try {
-      const encrypted = await fetchFromIPFS(purchase.ipfs_cid);
-      const buffer = decryptToBuffer(encrypted, purchase.encryption_key_base64);
-      const arrayBuffer = buffer.buffer.slice(
-        buffer.byteOffset,
-        buffer.byteOffset + buffer.byteLength
-      ) as ArrayBuffer;
-      const blob = new Blob([arrayBuffer], { type: 'text/x-python' });
+      const blob = new Blob([src], { type: 'text/x-python' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -231,7 +229,7 @@ export default function DashboardPage() {
                     <p className="text-xs text-neutral-400 mt-0.5">{formatGEN(p.price)}</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    {p.encryption_key_base64 ? (
+                    {p.sourceCode ? (
                       <button
                         onClick={() => handleDownload(p)}
                         disabled={downloadingId === p.listing_id}

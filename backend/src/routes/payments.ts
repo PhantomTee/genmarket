@@ -41,28 +41,31 @@ router.post('/confirm', async (req: Request, res: Response) => {
       });
     }
 
+    // ── On-chain escrow verification (mandatory) ────────────────────────────
+    // The frontend calls confirm_purchase on-chain BEFORE hitting this endpoint.
+    // After that, the contract transitions the escrow from 'locked' → 'released'.
+    // We accept both states to cover the small race window where the tx is
+    // finalized but our RPC cache hasn't updated yet.
     const finalEscrowId = String(escrow_id);
-
     const escrow = await getEscrow(finalEscrowId);
 
     if (!escrow) {
-      return res.status(404).json({ error: 'Escrow not found' });
+      return res.status(404).json({ error: 'Escrow not found on-chain' });
     }
 
-    if (
-      escrow.buyer &&
-      String(escrow.buyer).toLowerCase() !== String(buyer_address).toLowerCase()
-    ) {
+    // Buyer address is ALWAYS required — no conditional check
+    if (String(escrow.buyer).toLowerCase() !== String(buyer_address).toLowerCase()) {
       return res.status(403).json({
-        error: 'Address mismatch: not the buyer on this escrow',
+        error: 'Address mismatch: caller is not the buyer on this escrow',
       });
     }
 
-    if (escrow.status !== 'locked') {
+    if (escrow.status !== 'locked' && escrow.status !== 'released') {
       return res.status(400).json({
-        error: `Escrow is not locked (current: ${escrow.status})`,
+        error: `Payment not confirmed on-chain (escrow status: ${escrow.status}). Call confirm_purchase on-chain first.`,
       });
     }
+
 
     const dbRow = await getListingById(String(listing_id));
 

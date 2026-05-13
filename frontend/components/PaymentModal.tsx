@@ -161,6 +161,12 @@ export default function PaymentModal({
         );
       }
 
+      // ── Step 1: Confirm on-chain first ──────────────────────────────────
+      // The escrow transitions locked → released on-chain. The backend will
+      // refuse to decrypt until it sees 'locked' or 'released' on-chain.
+      await confirmPurchase(writeClient, savedEscrowId);
+
+      // ── Step 2: Backend delivers source only after on-chain proof ────────
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
       if (!backendUrl) {
@@ -185,8 +191,6 @@ export default function PaymentModal({
 
       const { sourceCode, sourceHash, verifiedHash, hashMatch } = await res.json();
 
-      await confirmPurchase(writeClient, savedEscrowId);
-
       const blob = new Blob([sourceCode], { type: 'text/x-python' });
       setDownloadUrl(URL.createObjectURL(blob));
       setHashInfo({ sourceHash, verifiedHash, hashMatch });
@@ -204,6 +208,9 @@ export default function PaymentModal({
             ipfs_cid: ipfsCid,
             escrow_id: savedEscrowId,
             source_hash: sourceHash,
+            // Store the decrypted source so the dashboard can re-download it
+            // without needing to call the backend again.
+            sourceCode,
           },
         ];
 

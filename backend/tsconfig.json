@@ -12,6 +12,10 @@
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true
   },
+  "ts-node": {
+    "esm": true,
+    "experimentalSpecifierResolution": "node"
+  },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 }

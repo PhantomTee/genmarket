@@ -1,5 +1,5 @@
 import nacl from 'tweetnacl';
-import { encodeBase64, decodeBase64, encodeUTF8, decodeUTF8 } from 'tweetnacl-util';
+import { encodeBase64, decodeBase64 } from 'tweetnacl-util';
 
 // Encrypt a raw file buffer (Uint8Array) with a fresh random key.
 // Returns both the base64-encoded ciphertext and the base64-encoded key.

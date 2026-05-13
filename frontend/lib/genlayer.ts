@@ -1,4 +1,4 @@
-import { createClient } from 'genlayer-js';
+import { createClient, createAccount } from 'genlayer-js';
 import { studionet } from 'genlayer-js/chains';
 import { TransactionStatus, ExecutionResult } from 'genlayer-js/types';
 
@@ -61,7 +61,10 @@ function marketplaceAddress(): `0x${string}` {
 // ---------------------------------------------------------------------------
 
 export function createReadClient() {
-  return createClient({ chain: studionet });
+  // A throw-away account is required by some genlayer-js versions for the
+  // internal signer to initialise. It is never used to sign write txs here.
+  const account = createAccount();
+  return createClient({ chain: studionet, account });
 }
 
 // ---------------------------------------------------------------------------
@@ -351,7 +354,7 @@ export async function buy(
 
   // Last fallback only. PaymentModal still verifies this with getEscrow().
   if (buyerAddress) {
-    return `${listingId}_${buyerAddress}`;
+    return `${listingId}_${buyerAddress.toLowerCase()}`;
   }
 
   return '';
@@ -402,9 +405,113 @@ export async function voteSeller(
     args: [escrowId, isUpvote],
   });
 }
+
+// ---------------------------------------------------------------------------
+// Deploy a contract to GenLayer Studionet
+// ---------------------------------------------------------------------------
+
+export async function deployContract(
+  writeClient: ReturnType<typeof createClient>,
+  sourceCode: string
+): Promise<`0x${string}`> {
+  const txHash = await (writeClient as any).deployContract({
+    code: sourceCode,
+    args: [],
+    value: 0n,
+  });
+
+  const readClient = createReadClient();
+
+  const receipt = await readClient.waitForTransactionReceipt({
+    hash: txHash,
+    status: TransactionStatus.FINALIZED,
+    interval: 3_000,
+    retries: 60,
+  });
+
+  if ((receipt as any).txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) {
+    throw new Error('Contract deployment failed');
+  }
+
+  // The deployed contract address is returned in the receipt
+  const addr =
+    (receipt as any).contractAddress ??
+    (receipt as any).to ??
+    (receipt as any)?.txExecutionResult?.contractAddress;
+
+  if (!addr) {
+    throw new Error('Deployment succeeded but no contract address returned');
+  }
+
+  return addr as `0x${string}`;
+}
 // ---------------------------------------------------------------------------
 // Marketplace — read methods
 // ---------------------------------------------------------------------------
+
+export async function callContractMethod(
+  contractAddress: string,
+  functionName: string,
+  args: unknown[]
+): Promise<unknown> {
+  const client = createReadClient();
+
+  const raw = await client.readContract({
+    address: contractAddress as `0x${string}`,
+    functionName,
+    args,
+  } as any);
+
+  // Try to parse as JSON, fall back to the raw value
+  if (typeof raw === 'string') {
+    try { return JSON.parse(raw); } catch { return raw; }
+  }
+  return raw;
+}
+
+export async function callWriteMethod(
+  writeClient: ReturnType<typeof createClient>,
+  contractAddress: string,
+  functionName: string,
+  args: unknown[],
+  value: bigint = 0n
+): Promise<{ txHash: string; result: unknown }> {
+  const receipt = await writeAndWait(writeClient, {
+    address: contractAddress as `0x${string}`,
+    functionName,
+    args,
+    value,
+  });
+
+  const result =
+    (receipt as any).returnValue ??
+    (receipt as any).result ??
+    (receipt as any)?.txExecutionResult?.returnValue ??
+    null;
+
+  return {
+    txHash: (receipt as any).transactionHash ?? (receipt as any).txHash ?? '',
+    result: result !== null && typeof result === 'string'
+      ? (() => { try { return JSON.parse(result); } catch { return result; } })()
+      : result,
+  };
+}
+
+export async function removeListing(
+  writeClient: ReturnType<typeof createClient>,
+  listingId: string
+): Promise<void> {
+  if (!listingId || !listingId.trim()) {
+    throw new Error('Missing listing id for remove_listing');
+  }
+
+  await writeAndWait(writeClient, {
+    address: marketplaceAddress(),
+    functionName: 'remove_listing',
+    args: [listingId],
+  });
+}
+
 
 export async function getAllListings(): Promise<Listing[]> {
   const client = createReadClient();

@@ -18,7 +18,7 @@ const router = Router();
 // Frontend sends plaintext fullSourceCode and public previewCode.
 router.post('/create', async (req: Request, res: Response) => {
   try {
-    const { title, description, price, category, demoContractAddress, fullSourceCode, previewCode } = req.body;
+    const { title, description, price, category, demoContractAddress, fullSourceCode, previewCode, sellerAddress } = req.body;
 
     if (!title || !description || !price || !category) {
       return res.status(400).json({ error: 'Missing required fields: title, description, price, category' });
@@ -32,6 +32,9 @@ router.post('/create', async (req: Request, res: Response) => {
     if (previewCode.trim() === fullSourceCode.trim()) {
       return res.status(400).json({ error: 'previewCode cannot be identical to fullSourceCode' });
     }
+    if (!sellerAddress || typeof sellerAddress !== 'string' || !sellerAddress.trim()) {
+      return res.status(400).json({ error: 'sellerAddress (connected wallet address) is required' });
+    }
 
     const listing_id = uuidv4();
 
@@ -43,7 +46,7 @@ router.post('/create', async (req: Request, res: Response) => {
     await insertListing({
       listing_id,
       ipfs_cid,
-      seller_pubkey: '',
+      seller_pubkey: sellerAddress.toLowerCase(),
       encryption_key: wrappedKey,
       created_at: Date.now(),
       preview_code: previewCode,

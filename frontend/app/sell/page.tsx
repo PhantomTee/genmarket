@@ -198,11 +198,12 @@ export default function SellPage() {
         body: JSON.stringify({
           title: form.title,
           description: form.description,
-          price: Number(parseGEN(form.priceGEN)),
+          price: parseGEN(form.priceGEN).toString(),
           category: form.category,
           demoContractAddress: form.demo_contract_address || 'pending',
           fullSourceCode: sourceCode,
           previewCode: previewCode.trim(),
+          sellerAddress: address,
         }),
       });
       const data = await res.json();
@@ -348,7 +349,14 @@ export default function SellPage() {
                     onChange={(e) => update('priceGEN', e.target.value)} placeholder="e.g. 1.5" className="input" />
                 </Field>
               </div>
-              <button onClick={() => setStep(2)} disabled={!form.title || !form.description || !form.priceGEN}
+              <button onClick={() => {
+                if (parseFloat(form.priceGEN) <= 0 || isNaN(parseFloat(form.priceGEN))) {
+                  setError('Price must be greater than 0');
+                  return;
+                }
+                setError(null);
+                setStep(2);
+              }} disabled={!form.title || !form.description || !form.priceGEN}
                 className="w-full bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200 font-semibold py-3.5 rounded-2xl hover:bg-neutral-700 transition-colors disabled:opacity-50">
                 Continue →
               </button>
