@@ -5,7 +5,7 @@ import { Listing } from '../lib/genlayer';
 
 async function getFeaturedListings(): Promise<Listing[]> {
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:4000'}/api/listings`, {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/listings`, {
       next: { revalidate: 60 },
     });
     if (!res.ok) return [];

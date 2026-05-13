@@ -1,7 +1,11 @@
 import type { Metadata } from 'next';
 import ListingClient from './ListingClient';
 
-const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:4000';
+const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL;
+
+if (!BACKEND) {
+  throw new Error('NEXT_PUBLIC_BACKEND_URL is not configured');
+}
 
 export async function generateMetadata(
   { params }: { params: Promise<{ id: string }> }

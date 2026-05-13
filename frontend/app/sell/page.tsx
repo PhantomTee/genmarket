@@ -191,7 +191,7 @@ export default function SellPage() {
       const buffer = new Uint8Array(await sourceFile.arrayBuffer());
       const { encryptedBase64, keyBase64 } = encryptFile(buffer);
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:4000'}/api/listings/create`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/listings/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -48,7 +48,7 @@ export default function PaymentModal({ listingId, price, ipfsCid, listingTitle, 
     setError(null);
     try {
       // 1. Get decryption key from backend (verifies escrow is locked on-chain)
-      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:4000'}/api/payments/confirm`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/payments/confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ listing_id: listingId, buyer_address: address }),

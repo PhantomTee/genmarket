@@ -5,7 +5,10 @@ export async function GET(req: NextRequest) {
   const address = req.nextUrl.searchParams.get('address');
   if (!address) return NextResponse.json({ error: 'address is required' }, { status: 400 });
 
-  const backendUrl = process.env.BACKEND_URL ?? 'http://localhost:4000';
+  const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL;
+  if (!backendUrl) {
+    return Response.json({ error: 'BACKEND_URL is not configured' }, { status: 500 });
+  }
   const res = await fetch(`${backendUrl}/api/listings/abi?address=${encodeURIComponent(address)}`);
   const data = await res.json();
   return NextResponse.json(data, { status: res.status });
