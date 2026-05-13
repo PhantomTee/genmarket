@@ -425,17 +425,113 @@ function judgeAddress(): `0x${string}` {
 
 function parseMaybeJson(value: unknown): unknown {
   let current = value;
-  for (let i = 0; i < 3; i++) {
+
+  for (let i = 0; i < 5; i++) {
     if (typeof current !== 'string') return current;
+
     const trimmed = current.trim();
     if (!trimmed) return null;
+
     try {
       current = JSON.parse(trimmed);
     } catch {
       return current;
     }
   }
+
   return current;
+}
+
+function decodeHexToText(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+
+  const hex = value.startsWith('0x') ? value.slice(2) : value;
+
+  if (!hex || hex.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(hex)) {
+    return value;
+  }
+
+  try {
+    const bytes = new Uint8Array(hex.match(/.{1,2}/g)!.map((byte) => parseInt(byte, 16)));
+    const text = new TextDecoder().decode(bytes).replace(/\0/g, '').trim();
+
+    return text || value;
+  } catch {
+    return value;
+  }
+}
+
+function findReturnValueDeep(value: any, depth = 0): unknown {
+  if (!value || depth > 6) return null;
+
+  if (typeof value === 'string') {
+    const decoded = decodeHexToText(value);
+    const parsed = parseMaybeJson(decoded);
+
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      ('verdict' in (parsed as any) || 'confidence' in (parsed as any))
+    ) {
+      return parsed;
+    }
+
+    return null;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findReturnValueDeep(item, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  if (typeof value === 'object') {
+    const directKeys = [
+      'returnValue',
+      'return_value',
+      'returnData',
+      'return_data',
+      'result',
+      'output',
+      'outputs',
+    ];
+
+    for (const key of directKeys) {
+      if (key in value) {
+        const candidate = (value as any)[key];
+        const decoded = decodeHexToText(candidate);
+        const parsed = parseMaybeJson(decoded);
+
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          ('verdict' in (parsed as any) || 'confidence' in (parsed as any))
+        ) {
+          return parsed;
+        }
+
+        if (typeof parsed === 'string') {
+          const nested = parseMaybeJson(parsed);
+          if (
+            nested &&
+            typeof nested === 'object' &&
+            ('verdict' in (nested as any) || 'confidence' in (nested as any))
+          ) {
+            return nested;
+          }
+        }
+      }
+    }
+
+    for (const key of Object.keys(value)) {
+      const found = findReturnValueDeep((value as any)[key], depth + 1);
+      if (found) return found;
+    }
+  }
+
+  return null;
 }
 
 export async function evaluateWithJudge(
@@ -452,11 +548,13 @@ export async function evaluateWithJudge(
   });
 
   const readClient = createReadClient();
+
   const receipt = await readClient.waitForTransactionReceipt({
     hash: txHash as any,
     status: TransactionStatus.FINALIZED,
     interval: 3_000,
-    retries: 40,
+    retries: 60,
+    fullTransaction: true as any,
   });
 
   console.log('Judge receipt:', receipt);
@@ -473,18 +571,29 @@ export async function evaluateWithJudge(
     );
   }
 
-  const rawVerdict =
-    (receipt as any).returnValue ??
-    (receipt as any).result ??
-    (receipt as any)?.txExecutionResult?.returnValue ??
-    (receipt as any)?.txExecutionResult?.result ??
-    null;
+  const receiptValue = findReturnValueDeep(receipt);
+  if (receiptValue) {
+    console.log('Judge parsed from receipt:', receiptValue);
+    return receiptValue;
+  }
 
-  console.log('Judge raw verdict:', rawVerdict);
+  // GenLayer docs recommend debugTraceTransaction for execution return data/logs.
+  try {
+    const trace = await (readClient as any).debugTraceTransaction({
+      hash: txHash as any,
+      round: 0,
+    });
 
-  const parsed = parseMaybeJson(rawVerdict);
+    console.log('Judge trace:', trace);
 
-  console.log('Judge parsed verdict:', parsed);
+    const traceValue = findReturnValueDeep(trace);
+    if (traceValue) {
+      console.log('Judge parsed from trace:', traceValue);
+      return traceValue;
+    }
+  } catch (traceError) {
+    console.warn('Judge trace lookup failed:', traceError);
+  }
 
-  return parsed;
+  throw new Error('Judge transaction finalized, but no return value was found');
 }
