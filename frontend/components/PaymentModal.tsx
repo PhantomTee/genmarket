@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useWallet } from '../lib/wallet-context';
-import { buy, confirmPurchase, voteSeller } from '../lib/genlayer';
+import { buy, confirmPurchase, voteSeller, getEscrow } from '../lib/genlayer';
 import { formatGEN } from '../lib/encryption';
 
 interface Props {
@@ -22,8 +22,16 @@ interface HashInfo {
   hashMatch: boolean | null;
 }
 
-export default function PaymentModal({ listingId, onchainListingId, price, ipfsCid, listingTitle, onClose }: Props) {
+export default function PaymentModal({
+  listingId,
+  onchainListingId,
+  price,
+  ipfsCid,
+  listingTitle,
+  onClose,
+}: Props) {
   const { address, writeClient } = useWallet();
+
   const [step, setStep] = useState<Step>('escrow');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,18 +39,51 @@ export default function PaymentModal({ listingId, onchainListingId, price, ipfsC
   const [hashInfo, setHashInfo] = useState<HashInfo | null>(null);
   const [escrowId, setEscrowId] = useState<string>('');
 
-  // Voting state (shown after download)
   const [voting, setVoting] = useState(false);
   const [voted, setVoted] = useState<'up' | 'down' | null>(null);
   const [voteError, setVoteError] = useState<string | null>(null);
 
-  async function handleLockEscrow() {
+  async function findValidEscrowId(chainId: string, buyerAddress: string, returnedEscrowId?: string) {
+    const candidates = Array.from(
+      new Set(
+        [
+          returnedEscrowId ? String(returnedEscrowId) : '',
+          `${chainId}_${buyerAddress}`,
+          `${chainId}_${buyerAddress.toLowerCase()}`,
+          `${chainId}_${buyerAddress.replace(/^0x/i, '')}`,
+          `${chainId}_${buyerAddress.toLowerCase().replace(/^0x/i, '')}`,
+        ].filter(Boolean)
+      )
+    );
+
+    for (const candidate of candidates) {
+      try {
+        const escrow = await getEscrow(candidate);
+
+        if (
+          escrow &&
+          String(escrow.buyer).toLowerCase() === String(buyerAddress).toLowerCase() &&
+          escrow.status === 'locked'
+        ) {
+          return candidate;
+        }
+      } catch {
+        // Try next possible escrow id
+      }
+    }
+
+    return '';
+  }
+
+  async function handlePayIntoEscrow() {
     if (!writeClient || !address) {
       setError('Connect your wallet first.');
       return;
     }
+
     setBusy(true);
     setError(null);
+
     try {
       const chainId = onchainListingId || (/^[0-9]+$/.test(listingId) ? listingId : '');
 
@@ -51,30 +92,39 @@ export default function PaymentModal({ listingId, onchainListingId, price, ipfsC
       }
 
       const returnedEscrowId = await buy(writeClient, chainId, BigInt(price), address);
-      const finalEscrowId = String(returnedEscrowId || '');
 
-      if (!finalEscrowId) {
-        throw new Error('Buy transaction completed, but escrow id was not returned.');
-      }
-      if (!chainId) {
-        throw new Error('Listing is not linked to an on-chain id yet.');
+      const verifiedEscrowId = await findValidEscrowId(
+        chainId,
+        address,
+        returnedEscrowId ? String(returnedEscrowId) : ''
+      );
+
+      if (!verifiedEscrowId) {
+        throw new Error(
+          'Payment was submitted, but the app could not verify the escrow on-chain yet. Refresh and try again in a moment.'
+        );
       }
 
-      setEscrowId(finalEscrowId);
-      localStorage.setItem(`genmarket_escrow_${listingId}`, finalEscrowId);
+      setEscrowId(verifiedEscrowId);
+      localStorage.setItem(`genmarket_escrow_${listingId}`, verifiedEscrowId);
 
       setStep('confirm');
     } catch (e: any) {
-      setError(e.message);
+      setError(e.message || 'Failed to pay into escrow');
     } finally {
       setBusy(false);
     }
   }
 
   async function handleConfirmPurchase() {
-    if (!writeClient || !address) return;
+    if (!writeClient || !address) {
+      setError('Connect your wallet first.');
+      return;
+    }
+
     setBusy(true);
     setError(null);
+
     try {
       const savedEscrowId =
         escrowId ||
@@ -82,13 +132,30 @@ export default function PaymentModal({ listingId, onchainListingId, price, ipfsC
         '';
 
       if (!savedEscrowId) {
-        throw new Error('No escrow found. Lock payment first.');
+        throw new Error('No escrow found. Pay into escrow first.');
+      }
+
+      // Verify the escrow still exists and belongs to this buyer before confirming.
+      const escrow = await getEscrow(savedEscrowId);
+
+      if (!escrow) {
+        throw new Error('Escrow not found on-chain.');
+      }
+
+      if (String(escrow.buyer).toLowerCase() !== String(address).toLowerCase()) {
+        throw new Error('This escrow belongs to a different buyer wallet.');
+      }
+
+      if (escrow.status !== 'locked') {
+        throw new Error(`Escrow is not locked. Current status: ${escrow.status}`);
       }
 
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
-      if (!backendUrl) throw new Error('NEXT_PUBLIC_BACKEND_URL is not configured');
+      if (!backendUrl) {
+        throw new Error('NEXT_PUBLIC_BACKEND_URL is not configured');
+      }
 
-      // Backend verifies escrow on-chain, decrypts, and delivers source
+      // Backend verifies escrow and decrypts the full source.
       const res = await fetch(`${backendUrl}/api/payments/confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -99,24 +166,25 @@ export default function PaymentModal({ listingId, onchainListingId, price, ipfsC
           buyer_address: address,
         }),
       });
+
       if (!res.ok) {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({}));
         throw new Error(err.error ?? 'Failed to confirm purchase');
       }
+
       const { sourceCode, sourceHash, verifiedHash, hashMatch } = await res.json();
 
-      // Build blob URL for download
+      // Release funds to seller on-chain.
+      await confirmPurchase(writeClient, savedEscrowId);
+
       const blob = new Blob([sourceCode], { type: 'text/x-python' });
       setDownloadUrl(URL.createObjectURL(blob));
       setHashInfo({ sourceHash, verifiedHash, hashMatch });
 
-      // Release funds to seller on-chain
-      await confirmPurchase(writeClient, savedEscrowId);
-
-      // Persist purchase in localStorage
       try {
         const storedRaw = JSON.parse(localStorage.getItem('purchases') ?? '[]');
         const stored = Array.isArray(storedRaw) ? storedRaw : [];
+
         const updated = [
           ...stored.filter((p: any) => p.listing_id !== listingId),
           {
@@ -128,12 +196,15 @@ export default function PaymentModal({ listingId, onchainListingId, price, ipfsC
             source_hash: sourceHash,
           },
         ];
+
         localStorage.setItem('purchases', JSON.stringify(updated));
-      } catch { /* non-fatal */ }
+      } catch {
+        // Non-fatal
+      }
 
       setStep('download');
     } catch (e: any) {
-      setError(e.message);
+      setError(e.message || 'Failed to confirm purchase');
     } finally {
       setBusy(false);
     }
@@ -141,8 +212,10 @@ export default function PaymentModal({ listingId, onchainListingId, price, ipfsC
 
   async function handleVote(isUpvote: boolean) {
     if (!writeClient) return;
+
     setVoting(true);
     setVoteError(null);
+
     try {
       const savedEscrowId =
         escrowId ||
@@ -156,7 +229,7 @@ export default function PaymentModal({ listingId, onchainListingId, price, ipfsC
       await voteSeller(writeClient, savedEscrowId, isUpvote);
       setVoted(isUpvote ? 'up' : 'down');
     } catch (e: any) {
-      setVoteError(e.message);
+      setVoteError(e.message || 'Failed to vote');
     } finally {
       setVoting(false);
     }
@@ -165,102 +238,133 @@ export default function PaymentModal({ listingId, onchainListingId, price, ipfsC
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/40 backdrop-blur-sm">
       <div className="bg-[#F7F4EF] dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md shadow-2xl overflow-hidden">
-
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-neutral-200 dark:border-neutral-700">
           <div className="flex items-center gap-2">
             {(['escrow', 'confirm', 'download'] as Step[]).map((s, i) => (
               <div key={s} className="flex items-center gap-2">
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
-                  step === s
-                    ? 'bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900'
-                    : (['escrow', 'confirm', 'download'].indexOf(step) > i)
-                    ? 'bg-emerald-500 text-white'
-                    : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-400 dark:text-neutral-500'
-                }`}>
+                <div
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+                    step === s
+                      ? 'bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900'
+                      : (['escrow', 'confirm', 'download'].indexOf(step) > i)
+                        ? 'bg-emerald-500 text-white'
+                        : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-400 dark:text-neutral-500'
+                  }`}
+                >
                   {(['escrow', 'confirm', 'download'].indexOf(step) > i) ? '✓' : i + 1}
                 </div>
                 {i < 2 && <div className="w-6 h-px bg-neutral-200 dark:bg-neutral-700" />}
               </div>
             ))}
           </div>
-          <button onClick={onClose} className="text-neutral-400 dark:text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors text-xl leading-none">
+
+          <button
+            onClick={onClose}
+            className="text-neutral-400 dark:text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors text-xl leading-none"
+          >
             ×
           </button>
         </div>
 
         <div className="px-6 py-6 flex flex-col gap-5">
-
-          {/* Step 1 — Lock escrow */}
           {step === 'escrow' && (
             <>
               <div>
-                <h2 className="text-lg font-bold text-neutral-900 dark:text-neutral-100 mb-1">Lock payment in escrow</h2>
+                <h2 className="text-lg font-bold text-neutral-900 dark:text-neutral-100 mb-1">
+                  Pay into escrow
+                </h2>
                 <p className="text-sm text-neutral-500 dark:text-neutral-400">
-                  Your payment is held in a smart contract. You keep control: if the code doesn&apos;t deliver, you can refund.
+                  This calls the marketplace buy function and locks your payment in escrow.
                 </p>
               </div>
+
               <div className="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-2xl p-4 flex items-center justify-between">
                 <span className="text-sm text-neutral-500 dark:text-neutral-400">Amount</span>
-                <span className="text-xl font-bold text-neutral-900 dark:text-neutral-100">{formatGEN(price)}</span>
+                <span className="text-xl font-bold text-neutral-900 dark:text-neutral-100">
+                  {formatGEN(price)}
+                </span>
               </div>
-              {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-3">{error}</p>}
+
+              {error && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-3">
+                  {error}
+                </p>
+              )}
+
               <button
-                onClick={handleLockEscrow}
+                onClick={handlePayIntoEscrow}
                 disabled={busy}
                 className="w-full bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200 font-semibold py-3.5 rounded-2xl hover:bg-neutral-700 transition-colors disabled:opacity-50"
               >
-                {busy ? 'Waiting for wallet…' : 'Lock in escrow'}
+                {busy ? 'Waiting for wallet…' : 'Pay into escrow'}
               </button>
             </>
           )}
 
-          {/* Step 2 — Confirm purchase */}
           {step === 'confirm' && (
             <>
               <div>
-                <h2 className="text-lg font-bold text-neutral-900 dark:text-neutral-100 mb-1">Confirm your purchase</h2>
+                <h2 className="text-lg font-bold text-neutral-900 dark:text-neutral-100 mb-1">
+                  Release payment & download
+                </h2>
                 <p className="text-sm text-neutral-500 dark:text-neutral-400">
-                  Payment is locked. Confirming releases funds to the seller and delivers the source code.
+                  This releases escrow to the seller and delivers the source code to you.
                 </p>
               </div>
+
               <div className="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-2xl p-4">
-                <p className="text-xs text-neutral-400 dark:text-neutral-500 mb-1">Escrow ID</p>
-                <p className="font-mono text-xs text-neutral-700 dark:text-neutral-300 break-all">{escrowId}</p>
+                <p className="text-xs text-neutral-400 dark:text-neutral-500 mb-1">Verified Escrow ID</p>
+                <p className="font-mono text-xs text-neutral-700 dark:text-neutral-300 break-all">
+                  {escrowId || localStorage.getItem(`genmarket_escrow_${listingId}`) || 'Not found'}
+                </p>
               </div>
-              {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-3">{error}</p>}
+
+              {error && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-3">
+                  {error}
+                </p>
+              )}
+
               <button
                 onClick={handleConfirmPurchase}
                 disabled={busy}
                 className="w-full bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200 font-semibold py-3.5 rounded-2xl hover:bg-neutral-700 transition-colors disabled:opacity-50"
               >
-                {busy ? 'Confirming…' : 'Confirm purchase'}
+                {busy ? 'Confirming…' : 'Release payment & download'}
               </button>
             </>
           )}
 
-          {/* Step 3 — Download + vote */}
           {step === 'download' && (
             <>
               <div>
-                <div className="w-12 h-12 bg-emerald-100 rounded-2xl flex items-center justify-center text-2xl mb-4">✓</div>
-                <h2 className="text-lg font-bold text-neutral-900 dark:text-neutral-100 mb-1">Purchase complete</h2>
+                <div className="w-12 h-12 bg-emerald-100 rounded-2xl flex items-center justify-center text-2xl mb-4">
+                  ✓
+                </div>
+                <h2 className="text-lg font-bold text-neutral-900 dark:text-neutral-100 mb-1">
+                  Purchase complete
+                </h2>
                 <p className="text-sm text-neutral-500 dark:text-neutral-400">
                   Source code delivered. Download it below.
                 </p>
               </div>
 
-              {/* Hash verification */}
               {hashInfo && (
-                <div className={`rounded-xl p-3 border text-xs font-mono break-all ${
-                  hashInfo.hashMatch === true
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                    : hashInfo.hashMatch === false
-                    ? 'bg-red-50 border-red-200 text-red-800'
-                    : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400'
-                }`}>
+                <div
+                  className={`rounded-xl p-3 border text-xs font-mono break-all ${
+                    hashInfo.hashMatch === true
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : hashInfo.hashMatch === false
+                        ? 'bg-red-50 border-red-200 text-red-800'
+                        : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400'
+                  }`}
+                >
                   <p className="font-sans font-semibold mb-1">
-                    {hashInfo.hashMatch === true ? '✓ Hash verified' : hashInfo.hashMatch === false ? '⚠ Hash mismatch' : 'SHA-256'}
+                    {hashInfo.hashMatch === true
+                      ? '✓ Hash verified'
+                      : hashInfo.hashMatch === false
+                        ? '⚠ Hash mismatch'
+                        : 'SHA-256'}
                   </p>
                   <p className="opacity-75 break-all">{hashInfo.verifiedHash}</p>
                 </div>
@@ -276,14 +380,16 @@ export default function PaymentModal({ listingId, onchainListingId, price, ipfsC
                 </a>
               )}
 
-              {/* Voting */}
               <div className="border-t border-neutral-200 dark:border-neutral-700 pt-4">
                 <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-3">
                   Did the full source match the preview?
                 </p>
+
                 {voted ? (
                   <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl p-3">
-                    {voted === 'up' ? '👍 Thanks for your feedback!' : '👎 Thanks — your vote helps future buyers.'}
+                    {voted === 'up'
+                      ? '👍 Thanks for your feedback!'
+                      : '👎 Thanks — your vote helps future buyers.'}
                   </p>
                 ) : (
                   <div className="flex gap-3">
@@ -294,6 +400,7 @@ export default function PaymentModal({ listingId, onchainListingId, price, ipfsC
                     >
                       👍 Yes, it matched
                     </button>
+
                     <button
                       onClick={() => handleVote(false)}
                       disabled={voting}
@@ -303,9 +410,8 @@ export default function PaymentModal({ listingId, onchainListingId, price, ipfsC
                     </button>
                   </div>
                 )}
-                {voteError && (
-                  <p className="mt-2 text-xs text-red-600">{voteError}</p>
-                )}
+
+                {voteError && <p className="mt-2 text-xs text-red-600">{voteError}</p>}
               </div>
 
               <button
