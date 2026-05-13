@@ -119,22 +119,26 @@ export default function PaymentModal({
       localStorage.removeItem(escrowStorageKey());
       setEscrowId('');
 
+      // buy() waits for FINALIZED and checks txExecutionResultName !== FINISHED_WITH_ERROR.
+      // If it returns without throwing, the escrow was created on-chain.
       const returnedEscrowId = await buy(writeClient, chainId, BigInt(price), address);
 
-      const verifiedEscrowId = await findValidEscrowId(
-        chainId,
-        address,
-        returnedEscrowId
-      );
+      // If buy() extracted a valid escrow ID directly from the receipt
+      // (format: "<listingId>_0x<address>"), trust it immediately — no need
+      // to call get_escrow_json which often fails due to state propagation lag.
+      const validIdPattern = new RegExp(`^${chainId}_0x[0-9a-fA-F]{40}$`);
+      const escrowIdToUse = validIdPattern.test(returnedEscrowId)
+        ? returnedEscrowId
+        : await findValidEscrowId(chainId, address, returnedEscrowId);
 
-      if (!verifiedEscrowId) {
+      if (!escrowIdToUse) {
         throw new Error(
-          'Payment was submitted, but the app could not verify the escrow on-chain yet. Wait a few seconds, refresh, and try again.'
+          'Payment was submitted, but the escrow ID could not be determined. Your payment is safe — refresh and the app will resume from where you left off.'
         );
       }
 
-      setEscrowId(verifiedEscrowId);
-      localStorage.setItem(escrowStorageKey(), verifiedEscrowId);
+      setEscrowId(escrowIdToUse);
+      localStorage.setItem(escrowStorageKey(), escrowIdToUse);
       setStep('confirm');
     } catch (e: any) {
       setError(e.message || 'Failed to pay into escrow');
@@ -142,6 +146,7 @@ export default function PaymentModal({
       setBusy(false);
     }
   }
+
 
   async function handleConfirmPurchase() {
     if (!writeClient || !address) {
