@@ -11,15 +11,18 @@ export async function initDb(): Promise<void> {
       encryption_key   TEXT NOT NULL,
       created_at       BIGINT NOT NULL,
       chain_listing_id TEXT,
+      preview_code     TEXT,
+      source_hash      TEXT,
       lint_status      TEXT,
       lint_stdout      TEXT,
       lint_stderr      TEXT,
       linted_at        BIGINT
     )
   `);
-  await pool.query(`
-    ALTER TABLE listings ADD COLUMN IF NOT EXISTS chain_listing_id TEXT
-  `);
+  // Safe migrations for existing deployments
+  await pool.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS chain_listing_id TEXT`);
+  await pool.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS preview_code TEXT`);
+  await pool.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS source_hash TEXT`);
 }
 
 export interface DbListing {
@@ -29,17 +32,19 @@ export interface DbListing {
   encryption_key: string;
   created_at: number;
   chain_listing_id?: string;
+  preview_code?: string;
+  source_hash?: string;
   lint_status?: string;
   lint_stdout?: string;
   lint_stderr?: string;
   linted_at?: number;
 }
 
-export async function insertListing(row: DbListing): Promise<void> {
+export async function insertListing(row: Omit<DbListing, 'chain_listing_id' | 'lint_status' | 'lint_stdout' | 'lint_stderr' | 'linted_at'>): Promise<void> {
   await pool.query(
-    `INSERT INTO listings (listing_id, ipfs_cid, seller_pubkey, encryption_key, created_at)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [row.listing_id, row.ipfs_cid, row.seller_pubkey, row.encryption_key, row.created_at]
+    `INSERT INTO listings (listing_id, ipfs_cid, seller_pubkey, encryption_key, created_at, preview_code, source_hash)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [row.listing_id, row.ipfs_cid, row.seller_pubkey, row.encryption_key, row.created_at, row.preview_code ?? null, row.source_hash ?? null]
   );
 }
 

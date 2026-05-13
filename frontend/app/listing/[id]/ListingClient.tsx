@@ -44,6 +44,34 @@ function normalizeVerdict(raw: any): Verdict {
   };
 }
 
+function SellerReputation({ listing }: { listing: Listing }) {
+  const upvotes = Number(listing.seller_upvotes ?? 0);
+  const downvotes = Number(listing.seller_downvotes ?? 0);
+  const total = upvotes + downvotes;
+
+  if (total === 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-neutral-400 dark:text-neutral-500 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 px-2.5 py-1 rounded-full">
+        ★ No ratings yet
+      </span>
+    );
+  }
+
+  const score = Math.round((upvotes / total) * 100);
+  const cls =
+    score >= 70
+      ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+      : score >= 40
+      ? 'text-amber-700 bg-amber-50 border-amber-200'
+      : 'text-red-700 bg-red-50 border-red-200';
+
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs font-medium border px-2.5 py-1 rounded-full ${cls}`}>
+      ★ {score}% source match ({total} {total === 1 ? 'rating' : 'ratings'})
+    </span>
+  );
+}
+
 export default function ListingClient({ id }: Props) {
   const { writeClient, connect, connecting } = useWallet();
   const [listing, setListing] = useState<Listing | null>(null);
@@ -93,20 +121,19 @@ export default function ListingClient({ id }: Props) {
   async function handleEvaluate() {
     if (!requirement.trim() || !listing) return;
     if (!writeClient) { await connect(); return; }
+
+    if (!listing.preview_code) {
+      setJudgeError('This listing has no public preview code. The seller must add a preview before AI evaluation is available.');
+      return;
+    }
+
     setEvaluating(true);
     setVerdict(null);
     setJudgeError(null);
     try {
-      // Use real code preview if stored; otherwise tell the Judge no code is available
-      // so it does not receive description text masquerading as source code.
-      const sourceCodePreview =
-        (listing as any).preview_code ||
-        (listing as any).visible_code_preview ||
-        (listing as any).code_preview ||
-        '[Source code preview not available — evaluate based on seller description only]';
       const result = await evaluateWithJudge(
         writeClient,
-        sourceCodePreview,
+        listing.preview_code,
         listing.description,
         requirement,
       );
@@ -176,6 +203,11 @@ export default function ListingClient({ id }: Props) {
           </h1>
           <p className="text-neutral-500 dark:text-neutral-400 text-base mb-4">{listing.description}</p>
 
+          {/* Seller reputation */}
+          <div className="mb-3">
+            <SellerReputation listing={listing} />
+          </div>
+
           {/* Trust badges */}
           <div className="flex flex-wrap gap-2">
             <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
@@ -198,6 +230,24 @@ export default function ListingClient({ id }: Props) {
             </span>
           </div>
         </div>
+
+        {/* Public preview code */}
+        {listing.preview_code && (
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">Public Preview</h2>
+              <span className="text-xs text-neutral-400 dark:text-neutral-500">Partial source — full code delivered after purchase</span>
+            </div>
+            <pre className="bg-neutral-900 dark:bg-black text-neutral-100 text-xs font-mono rounded-2xl p-4 overflow-x-auto max-h-64 leading-relaxed whitespace-pre-wrap break-all">
+              {listing.preview_code}
+            </pre>
+            {listing.source_hash && (
+              <p className="mt-2 text-xs text-neutral-400 dark:text-neutral-500 font-mono">
+                SHA-256: <span className="break-all">{listing.source_hash}</span>
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Recent demo session banner */}
         {demoSession && (

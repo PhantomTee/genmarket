@@ -2,9 +2,8 @@
 
 import { useState } from 'react';
 import { useWallet } from '../lib/wallet-context';
-import { buy, confirmPurchase } from '../lib/genlayer';
-import { fetchFromIPFS } from '../lib/ipfs';
-import { decryptToBuffer, formatGEN } from '../lib/encryption';
+import { buy, confirmPurchase, voteSeller } from '../lib/genlayer';
+import { formatGEN } from '../lib/encryption';
 
 interface Props {
   listingId: string;
@@ -16,12 +15,24 @@ interface Props {
 
 type Step = 'escrow' | 'confirm' | 'download';
 
+interface HashInfo {
+  sourceHash: string;
+  verifiedHash: string;
+  hashMatch: boolean | null;
+}
+
 export default function PaymentModal({ listingId, price, ipfsCid, listingTitle, onClose }: Props) {
   const { address, writeClient } = useWallet();
   const [step, setStep] = useState<Step>('escrow');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [hashInfo, setHashInfo] = useState<HashInfo | null>(null);
+
+  // Voting state (shown after download)
+  const [voting, setVoting] = useState(false);
+  const [voted, setVoted] = useState<'up' | 'down' | null>(null);
+  const [voteError, setVoteError] = useState<string | null>(null);
 
   const escrowId = address ? `${listingId}_${address.toLowerCase()}` : '';
 
@@ -47,9 +58,10 @@ export default function PaymentModal({ listingId, price, ipfsCid, listingTitle, 
     setBusy(true);
     setError(null);
     try {
-      // 1. Get decryption key from backend (verifies escrow is locked on-chain)
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
       if (!backendUrl) throw new Error('NEXT_PUBLIC_BACKEND_URL is not configured');
+
+      // Backend verifies escrow on-chain, decrypts, and delivers source
       const res = await fetch(`${backendUrl}/api/payments/confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -59,26 +71,17 @@ export default function PaymentModal({ listingId, price, ipfsCid, listingTitle, 
         const err = await res.json();
         throw new Error(err.error ?? 'Failed to confirm purchase');
       }
-      const { encryption_key_base64, ipfs_cid } = await res.json();
+      const { sourceCode, sourceHash, verifiedHash, hashMatch } = await res.json();
 
-      // 2. Fetch encrypted source from IPFS and decrypt in browser
-      const encryptedSource = await fetchFromIPFS(ipfs_cid ?? ipfsCid);
-      const { decryptToBuffer: dtb } = await import('../lib/encryption');
-      const plainBuffer = dtb(encryptedSource, encryption_key_base64);
-
-      // 3. Build a blob URL for download
-const arrayBuffer = plainBuffer.buffer.slice(
-  plainBuffer.byteOffset,
-  plainBuffer.byteOffset + plainBuffer.byteLength
-) as ArrayBuffer;
-
-const blob = new Blob([arrayBuffer], { type: "text/x-python" });
+      // Build blob URL for download
+      const blob = new Blob([sourceCode], { type: 'text/x-python' });
       setDownloadUrl(URL.createObjectURL(blob));
+      setHashInfo({ sourceHash, verifiedHash, hashMatch });
 
-      // 4. Buyer calls confirm_purchase on-chain (releases funds to seller)
+      // Release funds to seller on-chain
       await confirmPurchase(writeClient, escrowId);
 
-      // 5. Persist purchase in localStorage so the dashboard buying tab survives refreshes
+      // Persist purchase in localStorage
       try {
         const storedRaw = JSON.parse(localStorage.getItem('purchases') ?? '[]');
         const stored = Array.isArray(storedRaw) ? storedRaw : [];
@@ -88,9 +91,9 @@ const blob = new Blob([arrayBuffer], { type: "text/x-python" });
             listing_id: listingId,
             title: listingTitle,
             price,
-            ipfs_cid: ipfs_cid ?? ipfsCid,
+            ipfs_cid: ipfsCid,
             escrow_id: escrowId,
-            encryption_key_base64,
+            source_hash: sourceHash,
           },
         ];
         localStorage.setItem('purchases', JSON.stringify(updated));
@@ -104,13 +107,27 @@ const blob = new Blob([arrayBuffer], { type: "text/x-python" });
     }
   }
 
+  async function handleVote(isUpvote: boolean) {
+    if (!writeClient) return;
+    setVoting(true);
+    setVoteError(null);
+    try {
+      await voteSeller(writeClient, escrowId, isUpvote);
+      setVoted(isUpvote ? 'up' : 'down');
+    } catch (e: any) {
+      setVoteError(e.message);
+    } finally {
+      setVoting(false);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/40 backdrop-blur-sm">
       <div className="bg-[#F7F4EF] dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md shadow-2xl overflow-hidden">
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-neutral-200 dark:border-neutral-700">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {(['escrow', 'confirm', 'download'] as Step[]).map((s, i) => (
               <div key={s} className="flex items-center gap-2">
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
@@ -163,7 +180,7 @@ const blob = new Blob([arrayBuffer], { type: "text/x-python" });
               <div>
                 <h2 className="text-lg font-bold text-neutral-900 dark:text-neutral-100 mb-1">Confirm your purchase</h2>
                 <p className="text-sm text-neutral-500 dark:text-neutral-400">
-                  Payment is locked. Confirming releases funds to the seller and gives you the source code.
+                  Payment is locked. Confirming releases funds to the seller and delivers the source code.
                 </p>
               </div>
               <div className="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-2xl p-4">
@@ -181,16 +198,33 @@ const blob = new Blob([arrayBuffer], { type: "text/x-python" });
             </>
           )}
 
-          {/* Step 3 — Download */}
+          {/* Step 3 — Download + vote */}
           {step === 'download' && (
             <>
               <div>
                 <div className="w-12 h-12 bg-emerald-100 rounded-2xl flex items-center justify-center text-2xl mb-4">✓</div>
                 <h2 className="text-lg font-bold text-neutral-900 dark:text-neutral-100 mb-1">Purchase complete</h2>
                 <p className="text-sm text-neutral-500 dark:text-neutral-400">
-                  Your source code has been decrypted in your browser. Download it below.
+                  Source code delivered. Download it below.
                 </p>
               </div>
+
+              {/* Hash verification */}
+              {hashInfo && (
+                <div className={`rounded-xl p-3 border text-xs font-mono break-all ${
+                  hashInfo.hashMatch === true
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    : hashInfo.hashMatch === false
+                    ? 'bg-red-50 border-red-200 text-red-800'
+                    : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400'
+                }`}>
+                  <p className="font-sans font-semibold mb-1">
+                    {hashInfo.hashMatch === true ? '✓ Hash verified' : hashInfo.hashMatch === false ? '⚠ Hash mismatch' : 'SHA-256'}
+                  </p>
+                  <p className="opacity-75 break-all">{hashInfo.verifiedHash}</p>
+                </div>
+              )}
+
               {downloadUrl && (
                 <a
                   href={downloadUrl}
@@ -200,6 +234,39 @@ const blob = new Blob([arrayBuffer], { type: "text/x-python" });
                   Download source (.py)
                 </a>
               )}
+
+              {/* Voting */}
+              <div className="border-t border-neutral-200 dark:border-neutral-700 pt-4">
+                <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-3">
+                  Did the full source match the preview?
+                </p>
+                {voted ? (
+                  <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl p-3">
+                    {voted === 'up' ? '👍 Thanks for your feedback!' : '👎 Thanks — your vote helps future buyers.'}
+                  </p>
+                ) : (
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => handleVote(true)}
+                      disabled={voting}
+                      className="flex-1 flex items-center justify-center gap-2 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-neutral-700 dark:text-neutral-300 font-medium py-3 rounded-2xl transition-colors disabled:opacity-50 text-sm"
+                    >
+                      👍 Yes, it matched
+                    </button>
+                    <button
+                      onClick={() => handleVote(false)}
+                      disabled={voting}
+                      className="flex-1 flex items-center justify-center gap-2 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 hover:border-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 text-neutral-700 dark:text-neutral-300 font-medium py-3 rounded-2xl transition-colors disabled:opacity-50 text-sm"
+                    >
+                      👎 No, it didn&apos;t
+                    </button>
+                  </div>
+                )}
+                {voteError && (
+                  <p className="mt-2 text-xs text-red-600">{voteError}</p>
+                )}
+              </div>
+
               <button
                 onClick={onClose}
                 className="w-full text-center text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors py-2"

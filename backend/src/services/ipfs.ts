@@ -38,3 +38,6 @@ export async function fetchContent(cid: string): Promise<string> {
   });
   return response.data;
 }
+
+// Alias used by payments route
+export const fetchFromIPFS = fetchContent;

@@ -11,11 +11,16 @@ export interface Listing {
   seller: string;
   title: string;
   description: string;
-  price: number;        // wei — native GEN token
+  price: number;
   category: string;
   demo_contract_address: string;
   ipfs_cid: string;
   status: 'active' | 'pending' | 'sold' | 'removed';
+  preview_code?: string;
+  source_hash?: string;
+  seller_upvotes?: string;
+  seller_downvotes?: string;
+  seller_score?: string;
 }
 
 export interface Escrow {
@@ -154,6 +159,8 @@ export async function createListing(
     category: string;
     demo_contract_address: string;
     ipfs_cid: string;
+    preview_code: string;
+    source_hash: string;
   }
 ): Promise<string> {
   const receipt = await writeAndWait(writeClient, {
@@ -166,9 +173,23 @@ export async function createListing(
       params.category,
       params.demo_contract_address,
       params.ipfs_cid,
+      params.preview_code,
+      params.source_hash,
     ],
   });
   return (receipt as any).returnValue ?? '';
+}
+
+export async function voteSeller(
+  writeClient: ReturnType<typeof createClient>,
+  escrowId: string,
+  isUpvote: boolean,
+): Promise<void> {
+  await writeAndWait(writeClient, {
+    address: marketplaceAddress(),
+    functionName: 'vote_seller',
+    args: [escrowId, isUpvote],
+  });
 }
 
 export async function buy(

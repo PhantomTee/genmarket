@@ -19,6 +19,34 @@ function truncateAddress(addr: string) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
+function ReputationBadge({ listing }: { listing: Listing }) {
+  const upvotes = Number(listing.seller_upvotes ?? 0);
+  const downvotes = Number(listing.seller_downvotes ?? 0);
+  const total = upvotes + downvotes;
+
+  if (total === 0) {
+    return (
+      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-400 dark:text-neutral-500">
+        No ratings
+      </span>
+    );
+  }
+
+  const score = Math.round((upvotes / total) * 100);
+  const cls =
+    score >= 70
+      ? 'bg-emerald-100 text-emerald-800'
+      : score >= 40
+      ? 'bg-amber-100 text-amber-800'
+      : 'bg-red-100 text-red-800';
+
+  return (
+    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${cls}`}>
+      ★ {score}% ({total})
+    </span>
+  );
+}
+
 interface Props {
   listing: Listing;
 }
@@ -45,7 +73,10 @@ export default function ListingCard({ listing }: Props) {
       <div className="flex items-center justify-between pt-1 border-t border-neutral-100 dark:border-neutral-800">
         <div>
           <p className="text-xs text-neutral-400 dark:text-neutral-500 mb-0.5">Seller</p>
-          <p className="font-mono text-xs text-neutral-600 dark:text-neutral-400">{truncateAddress(listing.seller)}</p>
+          <div className="flex items-center gap-1.5">
+            <p className="font-mono text-xs text-neutral-600 dark:text-neutral-400">{truncateAddress(listing.seller)}</p>
+            <ReputationBadge listing={listing} />
+          </div>
         </div>
         <div className="text-right">
           <p className="text-xs text-neutral-400 dark:text-neutral-500 mb-0.5">Price</p>

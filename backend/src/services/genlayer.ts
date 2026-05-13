@@ -30,11 +30,16 @@ export interface Listing {
   seller: string;
   title: string;
   description: string;
-  price: number;           // wei — native GEN token
+  price: number;
   category: string;
   demo_contract_address: string;
   ipfs_cid: string;
   status: 'active' | 'pending' | 'sold' | 'removed';
+  preview_code?: string;
+  source_hash?: string;
+  seller_upvotes?: string;
+  seller_downvotes?: string;
+  seller_score?: string;
 }
 
 export interface Escrow {
