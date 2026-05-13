@@ -21,7 +21,7 @@ class JudgeContract(gl.Contract):
 
         Called only when the buyer explicitly chooses Path B.
         The LLM call is wrapped in an inner function and passed to
-        eq_principle_prompt_comparative so validators independently run it
+        gl.eq_principle.prompt_comparative so validators independently run it
         and reach consensus before a result is accepted.
 
         Parameters

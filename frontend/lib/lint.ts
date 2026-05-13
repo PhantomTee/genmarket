@@ -190,7 +190,7 @@ export function lintContract(code: string): LintResult {
       // ── ERROR 4: Direct non-det call outside inner function ───────────
       if (directNonDetLine !== -1) {
         errors.push(
-          item('error', directNonDetLine, 1, 'gl.exec_prompt() must be called inside an inner function passed to gl.eq_principle_*')
+          item('error', directNonDetLine, 1, 'gl.nondet.exec_prompt() must be called inside an inner function passed to gl.eq_principle.*')
         );
       }
 

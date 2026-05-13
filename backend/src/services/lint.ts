@@ -255,7 +255,7 @@ export function lintContract(code: string): LintResult {
             'error',
             directNonDetLine,
             1,
-            "gl.exec_prompt() must be called inside an inner function passed to gl.eq_principle_*"
+            "gl.nondet.exec_prompt() must be called inside an inner function passed to gl.eq_principle.*"
           )
         );
       }
