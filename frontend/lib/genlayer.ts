@@ -335,33 +335,59 @@ export async function buy(
     status: TransactionStatus.FINALIZED,
     interval: 3_000,
     retries: 40,
-  });
+    fullTransaction: true,
+  } as any);
 
   if ((receipt as any).txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) {
     throw new Error('Transaction failed: buy');
   }
 
+  // Primary path: GenLayer SDK stores return value in consensus_data
+  const leaderReceipt = (receipt as any)?.consensus_data?.leader_receipt;
+  const eqOutputs = leaderReceipt?.eq_outputs;
+
+  // eq_outputs can be an array or object — find the string value
+  const fromOutputs = (() => {
+    if (!eqOutputs) return '';
+    if (typeof eqOutputs === 'string') return eqOutputs;
+    if (Array.isArray(eqOutputs) && eqOutputs.length > 0) {
+      const v = eqOutputs[0];
+      return typeof v === 'string' ? v : (v?.result ?? v?.value ?? '');
+    }
+    if (typeof eqOutputs === 'object') {
+      return (eqOutputs as any)?.result ?? (eqOutputs as any)?.value ?? '';
+    }
+    return '';
+  })();
+
+  if (fromOutputs && String(fromOutputs).trim()) {
+    const raw = String(fromOutputs).trim();
+    // Strip surrounding quotes if JSON-serialised string
+    return raw.replace(/^"+|"+$/g, '');
+  }
+
+  // Fallback: older receipt shape
   const direct =
     (receipt as any).returnValue ??
     (receipt as any).result ??
     (receipt as any)?.txExecutionResult?.returnValue ??
     '';
 
-  if (direct) return String(direct);
+  if (direct) return String(direct).trim();
 
+  // Last resort: debug trace
   const traced = await tryReadTxReturn(txHash as `0x${string}`);
   if (traced) return traced;
 
-  // Last fallback only — receipt.returnValue should always be set.
-  // The contract stores: listing_id + "_" + caller.as_hex (EIP-55 mixed-case).
-  // Do NOT lowercase — return both so findValidEscrowId can check either.
+  // Emergency fallback — construct from address (preserves casing)
   if (buyerAddress) {
     return `${listingId}_${buyerAddress}`;
   }
 
-
   return '';
 }
+
+
 
 export async function confirmPurchase(
   writeClient: ReturnType<typeof createClient>,
