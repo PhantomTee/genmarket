@@ -1,28 +1,41 @@
 import crypto from 'crypto';
 import { Router, Request, Response } from 'express';
 import { getEscrow } from '../services/genlayer.js';
-import { getListingById } from '../db/schema.js';
+import { getListingById, upsertPurchase, confirmPurchaseInDb, refundPurchaseInDb } from '../db/schema.js';
 import { decryptKeyWithMaster, decryptFromStorage } from '../services/encryption.js';
 import { fetchFromIPFS } from '../services/ipfs.js';
 
 const router = Router();
 
-// POST /api/payments/buy — tracking only, actual tx is wallet-submitted
+// POST /api/payments/buy — records purchase intent, actual tx is wallet-submitted
 router.post('/buy', async (req: Request, res: Response) => {
   try {
-    const { listing_id, buyer_address, escrow_id } = req.body;
+    const { listing_id, onchain_listing_id, buyer_address, escrow_id, price } = req.body;
 
-    if (!listing_id || !buyer_address) {
+    if (!listing_id || !buyer_address || !escrow_id) {
       return res.status(400).json({
-        error: 'listing_id and buyer_address are required',
+        error: 'listing_id, buyer_address, and escrow_id are required',
       });
     }
 
-    // Prefer the exact escrow_id returned by the contract/frontend.
-    // Do not manually build it from DB UUID + lowercased address.
+    // Record the purchase in DB (non-blocking — don't fail if it errors)
+    try {
+      await upsertPurchase({
+        listing_id,
+        onchain_listing_id: onchain_listing_id ?? escrow_id,
+        escrow_id: String(escrow_id),
+        buyer_address,
+        price: price ? String(price) : undefined,
+        status: 'locked',
+        created_at: Date.now(),
+      });
+    } catch (dbErr: any) {
+      console.warn('POST /buy DB upsert failed (non-fatal):', dbErr.message);
+    }
+
     return res.json({
-      escrow_id: escrow_id ? String(escrow_id) : null,
-      status: 'tracking_only',
+      escrow_id: String(escrow_id),
+      status: 'locked',
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -30,10 +43,10 @@ router.post('/buy', async (req: Request, res: Response) => {
 });
 
 // POST /api/payments/confirm
-// Verifies escrow is locked on-chain, decrypts full source on the backend, and delivers it.
+// Verifies escrow state on-chain, decrypts full source on the backend, and delivers it.
 router.post('/confirm', async (req: Request, res: Response) => {
   try {
-    const { listing_id, buyer_address, escrow_id } = req.body;
+    const { listing_id, buyer_address, escrow_id, onchain_listing_id } = req.body;
 
     if (!listing_id || !buyer_address || !escrow_id) {
       return res.status(400).json({
@@ -43,9 +56,8 @@ router.post('/confirm', async (req: Request, res: Response) => {
 
     // ── On-chain escrow verification (mandatory) ────────────────────────────
     // The frontend calls confirm_purchase on-chain BEFORE hitting this endpoint.
-    // After that, the contract transitions the escrow from 'locked' → 'released'.
-    // We accept both states to cover the small race window where the tx is
-    // finalized but our RPC cache hasn't updated yet.
+    // After that, the contract transitions the escrow: 'locked' → 'released'.
+    // We accept both states to cover the small race window.
     const finalEscrowId = String(escrow_id);
     const escrow = await getEscrow(finalEscrowId);
 
@@ -53,7 +65,6 @@ router.post('/confirm', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Escrow not found on-chain' });
     }
 
-    // Buyer address is ALWAYS required — no conditional check
     if (String(escrow.buyer).toLowerCase() !== String(buyer_address).toLowerCase()) {
       return res.status(403).json({
         error: 'Address mismatch: caller is not the buyer on this escrow',
@@ -66,13 +77,10 @@ router.post('/confirm', async (req: Request, res: Response) => {
       });
     }
 
-
     const dbRow = await getListingById(String(listing_id));
 
     if (!dbRow) {
-      return res.status(404).json({
-        error: 'Listing not found in database',
-      });
+      return res.status(404).json({ error: 'Listing not found in database' });
     }
 
     // Decrypt full source on the backend — key never leaves the server
@@ -89,6 +97,24 @@ router.post('/confirm', async (req: Request, res: Response) => {
     const sourceHash = dbRow.source_hash ?? verifiedHash;
     const hashMatch = dbRow.source_hash ? verifiedHash === dbRow.source_hash : null;
 
+    // Record confirmation in DB (non-blocking)
+    try {
+      await upsertPurchase({
+        listing_id,
+        onchain_listing_id: onchain_listing_id ?? finalEscrowId,
+        escrow_id: finalEscrowId,
+        buyer_address,
+        seller_address: dbRow.seller_pubkey || undefined,
+        ipfs_cid: dbRow.ipfs_cid,
+        source_hash: sourceHash,
+        status: 'released',
+        created_at: Date.now(),
+      });
+      await confirmPurchaseInDb(finalEscrowId);
+    } catch (dbErr: any) {
+      console.warn('POST /confirm DB update failed (non-fatal):', dbErr.message);
+    }
+
     return res.json({
       sourceCode,
       sourceHash,
@@ -99,27 +125,30 @@ router.post('/confirm', async (req: Request, res: Response) => {
     });
   } catch (err: any) {
     console.error('POST /confirm error:', err.message);
-
-    return res.status(500).json({
-      error: err.message,
-    });
+    return res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/payments/refund — tracking passthrough
+// POST /api/payments/refund — records refund in DB
 router.post('/refund', async (req: Request, res: Response) => {
   try {
     const { listing_id, buyer_address, escrow_id } = req.body;
 
-    if (!listing_id || !buyer_address) {
+    if (!listing_id || !buyer_address || !escrow_id) {
       return res.status(400).json({
-        error: 'listing_id and buyer_address are required',
+        error: 'listing_id, buyer_address, and escrow_id are required',
       });
     }
 
+    try {
+      await refundPurchaseInDb(String(escrow_id));
+    } catch (dbErr: any) {
+      console.warn('POST /refund DB update failed (non-fatal):', dbErr.message);
+    }
+
     return res.json({
-      escrow_id: escrow_id ? String(escrow_id) : null,
-      status: 'refund_initiated',
+      escrow_id: String(escrow_id),
+      status: 'refunded',
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
