@@ -94,24 +94,7 @@ async function readJson<T>(functionName: string, args: unknown[] = []): Promise<
 // ---------------------------------------------------------------------------
 
 export async function getAllListings(): Promise<Listing[]> {
-  const client = await getReadClient();
-  const addr = marketplaceAddress() as `0x${string}`;
-
-  const countRaw: unknown = await client.readContract({ address: addr, functionName: 'get_listing_count', args: [] });
-  const count = Number(countRaw);
-  const listings: Listing[] = [];
-
-  for (let i = 0; i < count; i++) {
-    try {
-      const raw: unknown = await client.readContract({ address: addr, functionName: 'get_listing_json', args: [String(i)] });
-      const listing = (typeof raw === 'string' ? JSON.parse(raw) : raw) as Listing;
-      listings.push(listing);
-    } catch {
-      // skip bad listings silently
-    }
-  }
-
-  return listings;
+  return readJson<Listing[]>('get_all_listings_json', []);
 }
 
 export async function getListing(listingId: string): Promise<Listing> {

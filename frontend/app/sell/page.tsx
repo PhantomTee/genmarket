@@ -234,15 +234,22 @@ export default function SellPage() {
         source_hash: sourceHash,
       });
 
-      // If the contract didn't return the listing ID, derive it from the new count
+      // If the contract didn't return the listing ID, derive it from all listings
       if (!chainId) {
         const readClient = createReadClient();
-        const countRaw = await readClient.readContract({
+        const rawListings = await readClient.readContract({
           address: (process.env.NEXT_PUBLIC_MARKETPLACE_CONTRACT_ADDRESS ?? '') as `0x${string}`,
-          functionName: 'get_listing_count',
+          functionName: 'get_all_listings_json',
           args: [],
         });
-        chainId = String(Math.max(0, Number(countRaw) - 1));
+
+        const parsedListings =
+          typeof rawListings === 'string' ? JSON.parse(rawListings) : rawListings;
+
+        const listings = Array.isArray(parsedListings) ? parsedListings : [];
+        const newest = listings[listings.length - 1];
+
+        chainId = newest?.id ? String(newest.id) : '';
       }
 
       if (chainId) {

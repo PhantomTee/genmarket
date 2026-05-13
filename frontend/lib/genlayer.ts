@@ -261,34 +261,16 @@ export async function removeListing(
 export async function getAllListings(): Promise<Listing[]> {
   const client = createReadClient();
 
-  const countRaw = await client.readContract({
+  const raw = await client.readContract({
     address: marketplaceAddress(),
-    functionName: "get_listing_count",
+    functionName: "get_all_listings_json",
     args: [],
   });
 
-  const count = Number(countRaw);
-  const listings: Listing[] = [];
+  const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+  const listings = Array.isArray(parsed) ? parsed : [];
 
-  for (let i = 0; i < count; i++) {
-    try {
-      const raw = await client.readContract({
-        address: marketplaceAddress(),
-        functionName: "get_listing_json",
-        args: [String(i)],
-      });
-
-      const listing = typeof raw === "string" ? JSON.parse(raw) : raw;
-
-      if ((listing as Listing).status === "active") {
-        listings.push(listing as Listing);
-      }
-    } catch (error) {
-      console.error(`Failed to load listing ${i}:`, error);
-    }
-  }
-
-  return listings;
+  return listings.filter((listing: any) => listing.status === "active") as Listing[];
 }
 
 export async function getListing(listingId: string): Promise<Listing> {
