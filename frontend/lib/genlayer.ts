@@ -403,13 +403,14 @@ function judgeAddress(): `0x${string}` {
 
 export async function evaluateWithJudge(
   writeClient: ReturnType<typeof createClient>,
+  sourceCodePreview: string,
   sellerDescription: string,
   buyerRequirement: string
 ): Promise<unknown> {
   const txHash = await writeClient.writeContract({
     address: judgeAddress(),
     functionName: 'evaluate',
-    args: [sellerDescription, buyerRequirement],
+    args: [sourceCodePreview, sellerDescription, buyerRequirement],
     value: 0n,
   });
 

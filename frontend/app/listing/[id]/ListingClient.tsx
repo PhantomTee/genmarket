@@ -70,7 +70,19 @@ export default function ListingClient({ id }: Props) {
     setVerdict(null);
     setJudgeError(null);
     try {
-      const result = await evaluateWithJudge(writeClient, listing.description, requirement);
+      const sourceCodePreview =
+        (listing as any).preview_code ||
+        (listing as any).visible_code_preview ||
+        (listing as any).code_preview ||
+        listing.description ||
+        "";
+
+      const result = await evaluateWithJudge(
+        writeClient,
+        sourceCodePreview,
+        listing.description,
+        requirement
+      );
       setVerdict(result as Verdict);
     } catch (e: any) {
       setJudgeError(e.message);
