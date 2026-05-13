@@ -47,57 +47,19 @@ export default function PaymentModal({
     return `genmarket_escrow_${listingId}`;
   }
 
-  async function verifyEscrow(candidate: string, buyerAddress: string) {
-    if (!candidate || !candidate.trim()) return false;
-
+  // New Marketplace contract: escrow_id === listing_id (no address guessing needed)
+  async function verifyEscrowDirect(escrowId: string, buyerAddress: string): Promise<boolean> {
+    if (!escrowId || !escrowId.trim()) return false;
     try {
-      const escrow = await getEscrow(candidate.trim());
-
-      return (
-        escrow &&
-        String(escrow.buyer).toLowerCase() === String(buyerAddress).toLowerCase() &&
-        escrow.status === 'locked'
-      );
+      const escrow = await getEscrow(escrowId.trim());
+      if (!escrow) return false;
+      if (String(escrow.buyer).toLowerCase() !== String(buyerAddress).toLowerCase()) return false;
+      if (escrow.status !== 'locked') return false;
+      return true;
     } catch {
       return false;
     }
   }
-
-  async function findValidEscrowId(
-    chainId: string,
-    buyerAddress: string,
-    returnedEscrowId?: string
-  ) {
-    const candidates = Array.from(
-      new Set(
-        [
-          returnedEscrowId ? String(returnedEscrowId).trim() : '',
-          `${chainId}_${buyerAddress.toLowerCase()}`,
-          `${chainId}_${buyerAddress}`,
-          `${chainId}_${buyerAddress.replace(/^0x/i, '')}`,
-          `${chainId}_${buyerAddress.toLowerCase().replace(/^0x/i, '')}`,
-        ].filter(Boolean)
-      )
-    );
-
-    // GenLayer tx finalization can take several seconds after the wallet confirms.
-    // Retry the full candidate sweep up to 10 times with a 5 s gap (50 s window).
-    const MAX_ATTEMPTS = 10;
-    const DELAY_MS = 5_000;
-
-    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-      if (attempt > 0) {
-        await new Promise((resolve) => setTimeout(resolve, DELAY_MS));
-      }
-      for (const candidate of candidates) {
-        const ok = await verifyEscrow(candidate, buyerAddress);
-        if (ok) return candidate;
-      }
-    }
-
-    return '';
-  }
-
 
   async function handlePayIntoEscrow() {
     if (!writeClient || !address) {
@@ -119,26 +81,16 @@ export default function PaymentModal({
       localStorage.removeItem(escrowStorageKey());
       setEscrowId('');
 
-      // buy() waits for FINALIZED and checks txExecutionResultName !== FINISHED_WITH_ERROR.
-      // If it returns without throwing, the escrow was created on-chain.
       const returnedEscrowId = await buy(writeClient, chainId, BigInt(price), address);
 
-      // If buy() extracted a valid escrow ID directly from the receipt
-      // (format: "<listingId>_0x<address>"), trust it immediately — no need
-      // to call get_escrow_json which often fails due to state propagation lag.
-      const validIdPattern = new RegExp(`^${chainId}_0x[0-9a-fA-F]{40}$`);
-      const escrowIdToUse = validIdPattern.test(returnedEscrowId)
-        ? returnedEscrowId
-        : await findValidEscrowId(chainId, address, returnedEscrowId);
+      // New contract: escrow_id === listing_id (e.g. "5").
+      // Use the receipt return value if available, otherwise fall back to chainId.
+      const finalEscrowId = (returnedEscrowId && returnedEscrowId.trim())
+        ? returnedEscrowId.trim()
+        : chainId;
 
-      if (!escrowIdToUse) {
-        throw new Error(
-          'Payment was submitted, but the escrow ID could not be determined. Your payment is safe — refresh and the app will resume from where you left off.'
-        );
-      }
-
-      setEscrowId(escrowIdToUse);
-      localStorage.setItem(escrowStorageKey(), escrowIdToUse);
+      setEscrowId(finalEscrowId);
+      localStorage.setItem(escrowStorageKey(), finalEscrowId);
       setStep('confirm');
     } catch (e: any) {
       setError(e.message || 'Failed to pay into escrow');
@@ -146,7 +98,6 @@ export default function PaymentModal({
       setBusy(false);
     }
   }
-
 
   async function handleConfirmPurchase() {
     if (!writeClient || !address) {
@@ -165,16 +116,22 @@ export default function PaymentModal({
         throw new Error('No verified escrow found. Pay into escrow first.');
       }
 
-      const isValid = await verifyEscrow(savedEscrowId, address);
+      // Verify the escrow directly — new contract uses listing_id as escrow_id
+      const escrow = await getEscrow(savedEscrowId);
 
-      if (!isValid) {
+      if (!escrow) {
         localStorage.removeItem(escrowStorageKey());
         setEscrowId('');
         setStep('escrow');
+        throw new Error('Escrow not found on-chain. Please pay into escrow again.');
+      }
 
-        throw new Error(
-          'Saved escrow ID is invalid or no longer locked. Please pay into escrow again.'
-        );
+      if (String(escrow.buyer).toLowerCase() !== String(address).toLowerCase()) {
+        throw new Error('This escrow belongs to a different buyer wallet.');
+      }
+
+      if (escrow.status !== 'locked') {
+        throw new Error(`Escrow is not locked. Current status: ${escrow.status}`);
       }
 
       // ── Step 1: Confirm on-chain first ──────────────────────────────────

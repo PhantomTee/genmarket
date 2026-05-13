@@ -377,12 +377,9 @@ export async function buy(
   const traced = await tryReadTxReturn(txHash as `0x${string}`);
   if (traced) return traced;
 
-  // Emergency fallback — construct from address (preserves casing)
-  if (buyerAddress) {
-    return `${listingId}_${buyerAddress}`;
-  }
-
-  return '';
+  // New Marketplace contract: escrow_id === listing_id.
+  // Return listing_id as the reliable fallback.
+  return listingId;
 }
 
 
@@ -604,14 +601,12 @@ export async function getEscrow(escrowId: string): Promise<Escrow | null> {
     } as any);
 
     const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    // Return null if the contract returned empty/null (escrow not found)
     if (!parsed || typeof parsed !== 'object') return null;
     return parsed as Escrow;
   } catch (err: any) {
-    // GenLayer raises 'execution failed' (Python KeyError) when the escrow ID
-    // does not exist in the contract's TreeMap. Treat this as 'not found'.
+    // GenLayer raises 'execution failed' when escrow_id not found.
     const msg = String(err?.message ?? '');
-    if (msg.includes('execution failed') || msg.includes('KeyError')) {
+    if (msg.includes('execution failed') || msg.includes('KeyError') || msg.includes('Escrow not found')) {
       return null;
     }
     throw err;
