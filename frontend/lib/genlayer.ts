@@ -124,7 +124,7 @@ async function writeAndWait(
     args: unknown[];
     value?: bigint;
   }
-): Promise<ReturnType<typeof createReadClient>['waitForTransactionReceipt'] extends (...a: any[]) => Promise<infer R> ? R : never> {
+): Promise<any> {
   const txHash = await writeClient.writeContract({
     address: params.address,
     functionName: params.functionName,
@@ -133,6 +133,7 @@ async function writeAndWait(
   });
 
   const readClient = createReadClient();
+
   const receipt = await readClient.waitForTransactionReceipt({
     hash: txHash,
     status: TransactionStatus.FINALIZED,
@@ -140,285 +141,14 @@ async function writeAndWait(
     retries: 40,
   });
 
-  if (receipt.txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) {
+  if ((receipt as any).txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) {
     throw new Error(`Transaction failed: ${params.functionName}`);
   }
 
   return receipt as any;
 }
 
-// ---------------------------------------------------------------------------
-// Marketplace — write methods (called from user wallet)
-// ---------------------------------------------------------------------------
-
-export async function createListing(
-  writeClient: ReturnType<typeof createClient>,
-  params: {
-    title: string;
-    description: string;
-    price: bigint;
-    category: string;
-    demo_contract_address: string;
-    ipfs_cid: string;
-    preview_code: string;
-    source_hash: string;
-  }
-): Promise<string> {
-  const receipt = await writeAndWait(writeClient, {
-    address: marketplaceAddress(),
-    functionName: 'create_listing',
-    args: [
-      params.title,
-      params.description,
-      params.price,
-      params.category,
-      params.demo_contract_address,
-      params.ipfs_cid,
-      params.preview_code,
-      params.source_hash,
-    ],
-  });
-  return (receipt as any).returnValue ?? '';
-}
-
-export async function voteSeller(
-  writeClient: ReturnType<typeof createClient>,
-  escrowId: string,
-  isUpvote: boolean,
-): Promise<void> {
-  await writeAndWait(writeClient, {
-    address: marketplaceAddress(),
-    functionName: 'vote_seller',
-    args: [escrowId, isUpvote],
-  });
-}
-
-export async function buy(
-  writeClient: ReturnType<typeof createClient>,
-  listingId: string,
-  priceWei: bigint,
-  buyerAddress?: string
-): Promise<string> {
-  const receipt = await writeAndWait(writeClient, {
-    address: marketplaceAddress(),
-    functionName: 'buy',
-    args: [listingId],
-    value: priceWei,
-  });
-
-  const returned =
-    (receipt as any).returnValue ??
-    (receipt as any).result ??
-    (receipt as any)?.txExecutionResult?.returnValue ??
-    '';
-
-  if (returned) return String(returned);
-
-  if (buyerAddress) {
-    return `${listingId}_${buyerAddress}`;
-  }
-
-  return '';
-}
-
-export async function confirmPurchase(
-  writeClient: ReturnType<typeof createClient>,
-  escrowId: string
-): Promise<void> {
-  await writeAndWait(writeClient, {
-    address: marketplaceAddress(),
-    functionName: 'confirm_purchase',
-    args: [escrowId],
-  });
-}
-
-export async function refund(
-  writeClient: ReturnType<typeof createClient>,
-  escrowId: string
-): Promise<void> {
-  await writeAndWait(writeClient, {
-    address: marketplaceAddress(),
-    functionName: 'refund',
-    args: [escrowId],
-  });
-}
-
-export async function removeListing(
-  writeClient: ReturnType<typeof createClient>,
-  listingId: string
-): Promise<void> {
-  await writeAndWait(writeClient, {
-    address: marketplaceAddress(),
-    functionName: 'remove_listing',
-    args: [listingId],
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Marketplace — read methods
-// ---------------------------------------------------------------------------
-
-export async function getAllListings(): Promise<Listing[]> {
-  const client = createReadClient();
-
-  const raw = await client.readContract({
-    address: marketplaceAddress(),
-    functionName: "get_all_listings_json",
-    args: [],
-  });
-
-  const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
-  const listings = Array.isArray(parsed) ? parsed : [];
-
-  return listings.filter((listing: any) => listing.status === "active") as Listing[];
-}
-
-export async function getListing(listingId: string): Promise<Listing> {
-  const client = createReadClient();
-
-  const raw = await client.readContract({
-    address: marketplaceAddress(),
-    functionName: "get_listing_json",
-    args: [listingId],
-  });
-
-  return (typeof raw === "string" ? JSON.parse(raw) : raw) as unknown as Listing;
-}
-
-export async function getListingsBySeller(seller: string): Promise<Listing[]> {
-  const client = createReadClient();
-  const raw = await client.readContract({
-    address: marketplaceAddress() as `0x${string}`,
-    functionName: 'get_listings_by_seller_json',
-    args: [seller],
-  });
-  const result = (typeof raw === 'string' ? JSON.parse(raw) : raw) as unknown as Listing[];
-  return Array.isArray(result) ? result : [];
-}
-
-export async function getListingsByCategory(category: string): Promise<Listing[]> {
-  const listings = await getAllListings();
-  return listings.filter((listing) => listing.category === category);
-}
-
-export async function getEscrow(escrowId: string): Promise<Escrow> {
-  const client = createReadClient();
-
-  const raw = await client.readContract({
-    address: marketplaceAddress(),
-    functionName: "get_escrow_json",
-    args: [escrowId],
-  });
-
-  return (typeof raw === "string" ? JSON.parse(raw) : raw) as unknown as Escrow;
-}
-
-// ---------------------------------------------------------------------------
-// Generic contract introspection — ContractPlayground
-// ---------------------------------------------------------------------------
-
-export async function getContractABI(address: string): Promise<ABI> {
-  const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL ?? '';
-  const res = await fetch(`${BACKEND}/api/listings/abi?address=${encodeURIComponent(address)}`);
-  if (!res.ok) throw new Error('Failed to fetch contract ABI');
-  return res.json();
-}
-
-export async function callContractMethod(
-  address: string,
-  functionName: string,
-  args: unknown[]
-): Promise<unknown> {
-  const client = createReadClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return client.readContract({
-    address: address as `0x${string}`,
-    functionName,
-    args: args as any,
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Call a write (non-readonly) method on an arbitrary contract
-// ---------------------------------------------------------------------------
-
-export async function callWriteMethod(
-  writeClient: ReturnType<typeof createClient>,
-  address: string,
-  functionName: string,
-  args: unknown[],
-  value = 0n
-): Promise<{ txHash: string; result: unknown; receipt: unknown }> {
-  const txHash = await writeClient.writeContract({
-    address: address as `0x${string}`,
-    functionName,
-    args: args as any[],
-    value,
-  });
-
-  const readClient = createReadClient();
-  const receipt = await readClient.waitForTransactionReceipt({
-    hash: txHash as any,
-    status: TransactionStatus.FINALIZED,
-    interval: 3_000,
-    retries: 40,
-  });
-
-  if ((receipt as any).txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) {
-    throw new Error('Transaction failed on-chain');
-  }
-
-  return {
-    txHash: txHash as string,
-    result: (receipt as any).returnValue ?? null,
-    receipt,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Deploy a new contract — returns the deployed contract address
-// ---------------------------------------------------------------------------
-
-export async function deployContract(
-  writeClient: ReturnType<typeof createClient>,
-  code: string
-): Promise<`0x${string}`> {
-  const txHash = await writeClient.deployContract({ code, args: [] });
-
-  const readClient = createReadClient();
-  const receipt = await readClient.waitForTransactionReceipt({
-    hash: txHash as any,
-    status: TransactionStatus.FINALIZED,
-    interval: 3_000,
-    retries: 60,
-  });
-
-  if (receipt.txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) {
-    throw new Error('Contract deployment failed on-chain');
-  }
-
-  // The deployed address lives in txDataDecoded or to_address
-  const decoded = (receipt as any).txDataDecoded;
-  const contractAddress =
-    decoded?.contractAddress ??
-    (receipt as any).to_address ??
-    (receipt as any).recipient;
-
-  if (!contractAddress) throw new Error('Deployment succeeded but contract address not found in receipt');
-  return contractAddress as `0x${string}`;
-}
-
-// ---------------------------------------------------------------------------
-// JudgeContract — buyer signs the tx with their own wallet
-// ---------------------------------------------------------------------------
-
-function judgeAddress(): `0x${string}` {
-  const addr = process.env.NEXT_PUBLIC_JUDGE_CONTRACT_ADDRESS;
-  if (!addr) throw new Error('NEXT_PUBLIC_JUDGE_CONTRACT_ADDRESS is not set');
-  return addr as `0x${string}`;
-}
-
-function parseMaybeJson(value: unknown): unknown {
+function safeParseJson(value: unknown): unknown {
   let current = value;
 
   for (let i = 0; i < 5; i++) {
@@ -437,91 +167,62 @@ function parseMaybeJson(value: unknown): unknown {
   return current;
 }
 
-function decodeHexToText(value: unknown): unknown {
+function decodeHexString(value: unknown): unknown {
   if (typeof value !== 'string') return value;
 
-  const hex = value.startsWith('0x') ? value.slice(2) : value;
-
-  if (!hex || hex.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(hex)) {
-    return value;
-  }
+  if (!/^0x[0-9a-fA-F]+$/.test(value)) return value;
 
   try {
-    const bytes = new Uint8Array(hex.match(/.{1,2}/g)!.map((byte) => parseInt(byte, 16)));
-    const text = new TextDecoder().decode(bytes).replace(/\0/g, '').trim();
+    const hex = value.slice(2);
+    let out = '';
 
-    return text || value;
+    for (let i = 0; i < hex.length; i += 2) {
+      out += String.fromCharCode(parseInt(hex.slice(i, i + 2), 16));
+    }
+
+    return out.replace(/\0+$/g, '');
   } catch {
     return value;
   }
 }
 
 function findReturnValueDeep(value: any, depth = 0): unknown {
-  if (!value || depth > 6) return null;
+  if (depth > 8 || value == null) return null;
 
-  if (typeof value === 'string') {
-    const decoded = decodeHexToText(value);
-    const parsed = parseMaybeJson(decoded);
+  const parsed = safeParseJson(decodeHexString(value));
 
-    if (
-      parsed &&
-      typeof parsed === 'object' &&
-      ('verdict' in (parsed as any) || 'confidence' in (parsed as any))
-    ) {
-      return parsed;
-    }
+  if (typeof parsed === 'string') {
+    return parsed;
+  }
 
+  if (typeof parsed !== 'object') {
     return null;
   }
 
-  if (Array.isArray(value)) {
-    for (const item of value) {
+  const directKeys = [
+    'returnValue',
+    'return_value',
+    'returnData',
+    'return_data',
+    'output',
+    'result',
+  ];
+
+  for (const key of directKeys) {
+    if (Object.prototype.hasOwnProperty.call(parsed, key)) {
+      const found = safeParseJson(decodeHexString((parsed as any)[key]));
+      if (found) return found;
+    }
+  }
+
+  if (Array.isArray(parsed)) {
+    for (const item of parsed) {
       const found = findReturnValueDeep(item, depth + 1);
       if (found) return found;
     }
-    return null;
-  }
-
-  if (typeof value === 'object') {
-    const directKeys = [
-      'returnValue',
-      'return_value',
-      'returnData',
-      'return_data',
-      'result',
-      'output',
-      'outputs',
-    ];
-
-    for (const key of directKeys) {
-      if (key in value) {
-        const candidate = (value as any)[key];
-        const decoded = decodeHexToText(candidate);
-        const parsed = parseMaybeJson(decoded);
-
-        if (
-          parsed &&
-          typeof parsed === 'object' &&
-          ('verdict' in (parsed as any) || 'confidence' in (parsed as any))
-        ) {
-          return parsed;
-        }
-
-        if (typeof parsed === 'string') {
-          const nested = parseMaybeJson(parsed);
-          if (
-            nested &&
-            typeof nested === 'object' &&
-            ('verdict' in (nested as any) || 'confidence' in (nested as any))
-          ) {
-            return nested;
-          }
-        }
-      }
-    }
-
-    for (const key of Object.keys(value)) {
-      const found = findReturnValueDeep((value as any)[key], depth + 1);
+  } else {
+    for (const item of Object.values(parsed as Record<string, unknown>)) {
+      const found = findReturnValueDeep(item, depth + 1);
       if (found) return found;
     }
   }
@@ -529,12 +230,296 @@ function findReturnValueDeep(value: any, depth = 0): unknown {
   return null;
 }
 
+async function tryReadTxReturn(txHash: `0x${string}`): Promise<string> {
+  const readClient = createReadClient();
+
+  try {
+    const trace = await (readClient as any).debugTraceTransaction({
+      hash: txHash,
+      round: 0,
+    });
+
+    const value = findReturnValueDeep(trace);
+
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+
+    if (value != null) {
+      return String(value);
+    }
+  } catch {
+    // Some clients may not expose debugTraceTransaction.
+  }
+
+  return '';
+}
+
+// ---------------------------------------------------------------------------
+// Marketplace — write methods
+// ---------------------------------------------------------------------------
+
+export async function createListing(
+  writeClient: ReturnType<typeof createClient>,
+  params: {
+    title: string;
+    description: string;
+    price: bigint;
+    category: string;
+    demo_contract_address: string;
+    ipfs_cid: string;
+    preview_code: string;
+    source_hash: string;
+  }
+): Promise<string> {
+  const txHash = await writeClient.writeContract({
+    address: marketplaceAddress(),
+    functionName: 'create_listing',
+    args: [
+      params.title,
+      params.description,
+      params.price,
+      params.category,
+      params.demo_contract_address,
+      params.ipfs_cid,
+      params.preview_code,
+      params.source_hash,
+    ] as any[],
+    value: 0n,
+  });
+
+  const readClient = createReadClient();
+
+  const receipt = await readClient.waitForTransactionReceipt({
+    hash: txHash,
+    status: TransactionStatus.FINALIZED,
+    interval: 3_000,
+    retries: 40,
+  });
+
+  if ((receipt as any).txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) {
+    throw new Error('Transaction failed: create_listing');
+  }
+
+  const direct =
+    (receipt as any).returnValue ??
+    (receipt as any).result ??
+    (receipt as any)?.txExecutionResult?.returnValue ??
+    '';
+
+  if (direct) return String(direct);
+
+  return tryReadTxReturn(txHash as `0x${string}`);
+}
+
+export async function buy(
+  writeClient: ReturnType<typeof createClient>,
+  listingId: string,
+  priceWei: bigint,
+  buyerAddress?: string
+): Promise<string> {
+  const txHash = await writeClient.writeContract({
+    address: marketplaceAddress(),
+    functionName: 'buy',
+    args: [listingId],
+    value: priceWei,
+  });
+
+  const readClient = createReadClient();
+
+  const receipt = await readClient.waitForTransactionReceipt({
+    hash: txHash,
+    status: TransactionStatus.FINALIZED,
+    interval: 3_000,
+    retries: 40,
+  });
+
+  if ((receipt as any).txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) {
+    throw new Error('Transaction failed: buy');
+  }
+
+  const direct =
+    (receipt as any).returnValue ??
+    (receipt as any).result ??
+    (receipt as any)?.txExecutionResult?.returnValue ??
+    '';
+
+  if (direct) return String(direct);
+
+  const traced = await tryReadTxReturn(txHash as `0x${string}`);
+  if (traced) return traced;
+
+  // Last fallback only. PaymentModal still verifies this with getEscrow().
+  if (buyerAddress) {
+    return `${listingId}_${buyerAddress}`;
+  }
+
+  return '';
+}
+
+export async function confirmPurchase(
+  writeClient: ReturnType<typeof createClient>,
+  escrowId: string
+): Promise<void> {
+  if (!escrowId || !escrowId.trim()) {
+    throw new Error('Missing escrow id for confirm_purchase');
+  }
+
+  await writeAndWait(writeClient, {
+    address: marketplaceAddress(),
+    functionName: 'confirm_purchase',
+    args: [escrowId],
+  });
+}
+
+export async function refund(
+  writeClient: ReturnType<typeof createClient>,
+  escrowId: string
+): Promise<void> {
+  if (!escrowId || !escrowId.trim()) {
+    throw new Error('Missing escrow id for refund');
+  }
+
+  await writeAndWait(writeClient, {
+    address: marketplaceAddress(),
+    functionName: 'refund',
+    args: [escrowId],
+  });
+}
+
+export async function voteSeller(
+  writeClient: ReturnType<typeof createClient>,
+  escrowId: string,
+  isUpvote: boolean
+): Promise<void> {
+  if (!escrowId || !escrowId.trim()) {
+    throw new Error('Missing escrow id for vote_seller');
+  }
+
+  await writeAndWait(writeClient, {
+    address: marketplaceAddress(),
+    functionName: 'vote_seller',
+    args: [escrowId, isUpvote],
+  });
+}
+// ---------------------------------------------------------------------------
+// Marketplace — read methods
+// ---------------------------------------------------------------------------
+
+export async function getAllListings(): Promise<Listing[]> {
+  const client = createReadClient();
+
+  const raw = await client.readContract({
+    address: marketplaceAddress(),
+    functionName: 'get_all_listings_json',
+    args: [],
+  } as any);
+
+  const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  const listings = Array.isArray(parsed) ? parsed : [];
+
+  return listings.filter((listing: any) => listing.status === 'active') as Listing[];
+}
+
+export async function getListing(listingId: string): Promise<Listing> {
+  const client = createReadClient();
+
+  const raw = await client.readContract({
+    address: marketplaceAddress(),
+    functionName: 'get_listing_json',
+    args: [listingId],
+  } as any);
+
+  return (typeof raw === 'string' ? JSON.parse(raw) : raw) as Listing;
+}
+
+export async function getListingsBySeller(seller: string): Promise<Listing[]> {
+  const client = createReadClient();
+
+  const raw = await client.readContract({
+    address: marketplaceAddress(),
+    functionName: 'get_listings_by_seller_json',
+    args: [seller],
+  } as any);
+
+  const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  return Array.isArray(parsed) ? parsed as Listing[] : [];
+}
+
+export async function getListingsByCategory(category: string): Promise<Listing[]> {
+  const client = createReadClient();
+
+  const raw = await client.readContract({
+    address: marketplaceAddress(),
+    functionName: 'get_listings_by_category_json',
+    args: [category],
+  } as any);
+
+  const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  return Array.isArray(parsed) ? parsed as Listing[] : [];
+}
+
+export async function getEscrow(escrowId: string): Promise<Escrow> {
+  const client = createReadClient();
+
+  const raw = await client.readContract({
+    address: marketplaceAddress(),
+    functionName: 'get_escrow_json',
+    args: [escrowId],
+  } as any);
+
+  return (typeof raw === 'string' ? JSON.parse(raw) : raw) as Escrow;
+}
+
+// ---------------------------------------------------------------------------
+// Generic contract introspection — ContractPlayground
+// ---------------------------------------------------------------------------
+
+export async function getContractABI(address: string): Promise<ABI> {
+  const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL ?? '';
+
+  if (!BACKEND) {
+    throw new Error('NEXT_PUBLIC_BACKEND_URL is not configured');
+  }
+
+  const res = await fetch(`${BACKEND}/api/listings/abi?address=${encodeURIComponent(address)}`);
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error ?? 'Failed to fetch ABI');
+  }
+
+  const data = await res.json();
+  return Array.isArray(data) ? data as ABI : [];
+}
+
+// ---------------------------------------------------------------------------
+// Judge contract
+// ---------------------------------------------------------------------------
+
+function judgeAddress(): `0x${string}` {
+  const addr = process.env.NEXT_PUBLIC_JUDGE_CONTRACT_ADDRESS;
+
+  if (!addr) {
+    throw new Error('NEXT_PUBLIC_JUDGE_CONTRACT_ADDRESS is not set');
+  }
+
+  return addr as `0x${string}`;
+}
+
+export interface JudgeVerdict {
+  verdict: 'match' | 'partial' | 'mismatch';
+  confidence: number;
+  explanation: string;
+  caveats?: string[];
+}
+
 export async function evaluateWithJudge(
   writeClient: ReturnType<typeof createClient>,
   sourceCodePreview: string,
   sellerDescription: string,
-  buyerRequirement: string,
-): Promise<unknown> {
+  buyerRequirement: string
+): Promise<JudgeVerdict | string> {
   const txHash = await writeClient.writeContract({
     address: judgeAddress(),
     functionName: 'evaluate',
@@ -545,48 +530,42 @@ export async function evaluateWithJudge(
   const readClient = createReadClient();
 
   const receipt = await readClient.waitForTransactionReceipt({
-    hash: txHash as any,
+    hash: txHash,
     status: TransactionStatus.FINALIZED,
     interval: 3_000,
     retries: 60,
   });
 
-  console.log('Judge receipt:', receipt);
-
   if ((receipt as any).txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) {
-    const stderr =
-      (receipt as any)?.txExecutionResult?.stderr ||
-      (receipt as any)?.stderr ||
-      '';
-    throw new Error(
-      stderr
-        ? `Judge evaluation failed on-chain: ${stderr}`
-        : 'Judge evaluation failed on-chain',
-    );
+    throw new Error('Judge transaction failed');
   }
 
-  const receiptValue = findReturnValueDeep(receipt);
-  if (receiptValue) {
-    console.log('Judge parsed from receipt:', receiptValue);
-    return receiptValue;
-  }
+  const direct =
+    (receipt as any).returnValue ??
+    (receipt as any).result ??
+    (receipt as any)?.txExecutionResult?.returnValue ??
+    findReturnValueDeep(receipt);
 
-  // GenLayer docs recommend debugTraceTransaction for execution return data/logs.
-  try {
-    const trace = await (readClient as any).debugTraceTransaction({
-      hash: txHash as any,
-      round: 0,
-    });
+  if (direct) {
+    const parsed = safeParseJson(decodeHexString(direct));
 
-    console.log('Judge trace:', trace);
-
-    const traceValue = findReturnValueDeep(trace);
-    if (traceValue) {
-      console.log('Judge parsed from trace:', traceValue);
-      return traceValue;
+    if (typeof parsed === 'object' && parsed !== null) {
+      return parsed as JudgeVerdict;
     }
-  } catch (traceError) {
-    console.warn('Judge trace lookup failed:', traceError);
+
+    return String(parsed);
+  }
+
+  const traced = await tryReadTxReturn(txHash as `0x${string}`);
+
+  if (traced) {
+    const parsed = safeParseJson(decodeHexString(traced));
+
+    if (typeof parsed === 'object' && parsed !== null) {
+      return parsed as JudgeVerdict;
+    }
+
+    return String(parsed);
   }
 
   throw new Error('Judge transaction finalized, but no return value was found');

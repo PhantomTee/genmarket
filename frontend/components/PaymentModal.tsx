@@ -6,9 +6,9 @@ import { buy, confirmPurchase, voteSeller, getEscrow } from '../lib/genlayer';
 import { formatGEN } from '../lib/encryption';
 
 interface Props {
-  listingId: string;          // DB id, used for UI/localStorage/backend
-  onchainListingId?: string;  // Marketplace id, used for buy()
-  price: number;              // wei
+  listingId: string;
+  onchainListingId?: string;
+  price: number;
   ipfsCid: string;
   listingTitle: string;
   onClose: () => void;
@@ -43,11 +43,35 @@ export default function PaymentModal({
   const [voted, setVoted] = useState<'up' | 'down' | null>(null);
   const [voteError, setVoteError] = useState<string | null>(null);
 
-  async function findValidEscrowId(chainId: string, buyerAddress: string, returnedEscrowId?: string) {
+  function escrowStorageKey() {
+    return `genmarket_escrow_${listingId}`;
+  }
+
+  async function verifyEscrow(candidate: string, buyerAddress: string) {
+    if (!candidate || !candidate.trim()) return false;
+
+    try {
+      const escrow = await getEscrow(candidate.trim());
+
+      return (
+        escrow &&
+        String(escrow.buyer).toLowerCase() === String(buyerAddress).toLowerCase() &&
+        escrow.status === 'locked'
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  async function findValidEscrowId(
+    chainId: string,
+    buyerAddress: string,
+    returnedEscrowId?: string
+  ) {
     const candidates = Array.from(
       new Set(
         [
-          returnedEscrowId ? String(returnedEscrowId) : '',
+          returnedEscrowId ? String(returnedEscrowId).trim() : '',
           `${chainId}_${buyerAddress}`,
           `${chainId}_${buyerAddress.toLowerCase()}`,
           `${chainId}_${buyerAddress.replace(/^0x/i, '')}`,
@@ -57,19 +81,8 @@ export default function PaymentModal({
     );
 
     for (const candidate of candidates) {
-      try {
-        const escrow = await getEscrow(candidate);
-
-        if (
-          escrow &&
-          String(escrow.buyer).toLowerCase() === String(buyerAddress).toLowerCase() &&
-          escrow.status === 'locked'
-        ) {
-          return candidate;
-        }
-      } catch {
-        // Try next possible escrow id
-      }
+      const ok = await verifyEscrow(candidate, buyerAddress);
+      if (ok) return candidate;
     }
 
     return '';
@@ -85,29 +98,32 @@ export default function PaymentModal({
     setError(null);
 
     try {
-      const chainId = onchainListingId || (/^[0-9]+$/.test(listingId) ? listingId : '');
+      const chainId =
+        onchainListingId || (/^[0-9]+$/.test(listingId) ? listingId : '');
 
       if (!chainId) {
         throw new Error('Listing is not linked to an on-chain id yet.');
       }
+
+      localStorage.removeItem(escrowStorageKey());
+      setEscrowId('');
 
       const returnedEscrowId = await buy(writeClient, chainId, BigInt(price), address);
 
       const verifiedEscrowId = await findValidEscrowId(
         chainId,
         address,
-        returnedEscrowId ? String(returnedEscrowId) : ''
+        returnedEscrowId
       );
 
       if (!verifiedEscrowId) {
         throw new Error(
-          'Payment was submitted, but the app could not verify the escrow on-chain yet. Refresh and try again in a moment.'
+          'Payment was submitted, but the app could not verify the escrow on-chain yet. Wait a few seconds, refresh, and try again.'
         );
       }
 
       setEscrowId(verifiedEscrowId);
-      localStorage.setItem(`genmarket_escrow_${listingId}`, verifiedEscrowId);
-
+      localStorage.setItem(escrowStorageKey(), verifiedEscrowId);
       setStep('confirm');
     } catch (e: any) {
       setError(e.message || 'Failed to pay into escrow');
@@ -127,35 +143,30 @@ export default function PaymentModal({
 
     try {
       const savedEscrowId =
-        escrowId ||
-        localStorage.getItem(`genmarket_escrow_${listingId}`) ||
-        '';
+        escrowId || localStorage.getItem(escrowStorageKey()) || '';
 
       if (!savedEscrowId) {
-        throw new Error('No escrow found. Pay into escrow first.');
+        throw new Error('No verified escrow found. Pay into escrow first.');
       }
 
-      // Verify the escrow still exists and belongs to this buyer before confirming.
-      const escrow = await getEscrow(savedEscrowId);
+      const isValid = await verifyEscrow(savedEscrowId, address);
 
-      if (!escrow) {
-        throw new Error('Escrow not found on-chain.');
-      }
+      if (!isValid) {
+        localStorage.removeItem(escrowStorageKey());
+        setEscrowId('');
+        setStep('escrow');
 
-      if (String(escrow.buyer).toLowerCase() !== String(address).toLowerCase()) {
-        throw new Error('This escrow belongs to a different buyer wallet.');
-      }
-
-      if (escrow.status !== 'locked') {
-        throw new Error(`Escrow is not locked. Current status: ${escrow.status}`);
+        throw new Error(
+          'Saved escrow ID is invalid or no longer locked. Please pay into escrow again.'
+        );
       }
 
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+
       if (!backendUrl) {
         throw new Error('NEXT_PUBLIC_BACKEND_URL is not configured');
       }
 
-      // Backend verifies escrow and decrypts the full source.
       const res = await fetch(`${backendUrl}/api/payments/confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -174,7 +185,6 @@ export default function PaymentModal({
 
       const { sourceCode, sourceHash, verifiedHash, hashMatch } = await res.json();
 
-      // Release funds to seller on-chain.
       await confirmPurchase(writeClient, savedEscrowId);
 
       const blob = new Blob([sourceCode], { type: 'text/x-python' });
@@ -202,6 +212,7 @@ export default function PaymentModal({
         // Non-fatal
       }
 
+      setEscrowId(savedEscrowId);
       setStep('download');
     } catch (e: any) {
       setError(e.message || 'Failed to confirm purchase');
@@ -218,9 +229,7 @@ export default function PaymentModal({
 
     try {
       const savedEscrowId =
-        escrowId ||
-        localStorage.getItem(`genmarket_escrow_${listingId}`) ||
-        '';
+        escrowId || localStorage.getItem(escrowStorageKey()) || '';
 
       if (!savedEscrowId) {
         throw new Error('No escrow found for this purchase.');
@@ -234,6 +243,8 @@ export default function PaymentModal({
       setVoting(false);
     }
   }
+
+  const shownEscrowId = escrowId || 'Verified after payment';
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/40 backdrop-blur-sm">
@@ -274,7 +285,7 @@ export default function PaymentModal({
                   Pay into escrow
                 </h2>
                 <p className="text-sm text-neutral-500 dark:text-neutral-400">
-                  This calls the marketplace buy function and locks your payment in escrow.
+                  This calls the buy function and locks your payment in the marketplace contract.
                 </p>
               </div>
 
@@ -313,9 +324,11 @@ export default function PaymentModal({
               </div>
 
               <div className="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-2xl p-4">
-                <p className="text-xs text-neutral-400 dark:text-neutral-500 mb-1">Verified Escrow ID</p>
+                <p className="text-xs text-neutral-400 dark:text-neutral-500 mb-1">
+                  Verified Escrow ID
+                </p>
                 <p className="font-mono text-xs text-neutral-700 dark:text-neutral-300 break-all">
-                  {escrowId || localStorage.getItem(`genmarket_escrow_${listingId}`) || 'Not found'}
+                  {shownEscrowId}
                 </p>
               </div>
 
