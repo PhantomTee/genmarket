@@ -106,49 +106,65 @@ router.get('/abi', async (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   const rawId = req.params.id;
   console.log('GET /api/listings/:id', rawId);
+
   try {
-    // 1. Try to find DB row by UUID or onchain_listing_id
-    let dbRow = await getListingByAnyId(rawId);
+    const dbRow = await getListingByAnyId(rawId);
 
-    // 2. Determine the on-chain ID
-    let chainId: string;
+    // Case 1: DB UUID or DB row exists
+    if (dbRow) {
+      const chainId = dbRow.onchain_listing_id || dbRow.chain_listing_id || null;
 
-    if (dbRow?.onchain_listing_id) {
-      chainId = dbRow.onchain_listing_id;
-    } else if (!UUID_RE.test(rawId)) {
-      // rawId is an on-chain integer id (e.g. "0") — use directly
-      chainId = rawId;
-    } else {
-      // UUID with no onchain_listing_id yet — scan on-chain by ipfs_cid
-      if (!dbRow) return res.status(404).json({ error: 'Listing not found' });
-      const all = await getAllListings();
-      const match = all.find((l) => l.ipfs_cid === dbRow!.ipfs_cid);
-      if (match) {
-        await updateOnchainListingId(dbRow.listing_id, match.id);
-        dbRow = { ...dbRow, onchain_listing_id: match.id };
-        chainId = match.id;
-      } else {
-        return res.status(404).json({ error: 'Listing not yet confirmed on-chain' });
+      // If DB row is not linked to on-chain yet, return DB-safe data.
+      // Do NOT call GenLayer with a UUID.
+      if (!chainId) {
+        return res.json({
+          id: dbRow.listing_id,
+          listing_id: dbRow.listing_id,
+          onchain_listing_id: null,
+          ipfs_cid: dbRow.ipfs_cid,
+          preview_code: dbRow.preview_code || '',
+          source_hash: dbRow.source_hash || '',
+          status: 'pending_onchain',
+          seller_upvotes: '0',
+          seller_downvotes: '0',
+          seller_score: 'none',
+        });
       }
+
+      const listing = await getListing(chainId);
+
+      return res.json({
+        ...listing,
+        id: dbRow.listing_id,
+        listing_id: dbRow.listing_id,
+        onchain_listing_id: chainId,
+        onchain_id: chainId,
+        ipfs_cid: dbRow.ipfs_cid || listing.ipfs_cid,
+        preview_code: (listing as any).preview_code || dbRow.preview_code || '',
+        source_hash: (listing as any).source_hash || dbRow.source_hash || '',
+      });
     }
 
-    // 3. Fetch on-chain data
-    const listing = await getListing(chainId);
-    if (!listing) return res.status(404).json({ error: 'Listing not found on-chain' });
+    // Case 2: No DB row, but rawId is numeric, so it may be an on-chain listing id
+    if (/^[0-9]+$/.test(rawId)) {
+      const listing = await getListing(rawId);
 
-    console.log('Found listing id=%s onchain_listing_id=%s', listing.id, chainId);
+      return res.json({
+        ...listing,
+        id: listing.id,
+        onchain_listing_id: listing.id,
+        onchain_id: listing.id,
+      });
+    }
 
-    // 4. Return merged response with both IDs explicit
-    return res.json({
-      ...listing,
-      onchain_listing_id: chainId,
-      ipfs_cid:     dbRow?.ipfs_cid     ?? listing.ipfs_cid,
-      preview_code: (listing as any).preview_code || dbRow?.preview_code || '',
-      source_hash:  (listing as any).source_hash  || dbRow?.source_hash  || '',
-    });
+    // Case 3: UUID not found in DB
+    return res.status(404).json({ error: 'Listing not found' });
   } catch (err: any) {
     console.error('GET /api/listings/:id error', rawId, err.message);
-    return res.status(500).json({ error: 'Failed to load listing', details: err.message });
+    return res.status(500).json({
+      error: 'Failed to load listing',
+      details: err.message,
+    });
   }
 });
 
