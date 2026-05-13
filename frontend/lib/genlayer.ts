@@ -233,6 +233,39 @@ function findReturnValueDeep(value: any, depth = 0): unknown {
   return null;
 }
 
+// Shared helper — reads the contract's return value from a fullTransaction receipt.
+// GenLayer SDK puts it in consensus_data.leader_receipt.eq_outputs (not .returnValue).
+function extractReturnValue(receipt: any): string {
+  // Primary: consensus_data path (requires fullTransaction: true)
+  const eqOutputs = receipt?.consensus_data?.leader_receipt?.eq_outputs;
+
+  const fromOutputs = (() => {
+    if (!eqOutputs) return '';
+    if (typeof eqOutputs === 'string') return eqOutputs;
+    if (Array.isArray(eqOutputs) && eqOutputs.length > 0) {
+      const v = eqOutputs[0];
+      return typeof v === 'string' ? v : (v?.result ?? v?.value ?? '');
+    }
+    if (typeof eqOutputs === 'object') {
+      return eqOutputs?.result ?? eqOutputs?.value ?? '';
+    }
+    return '';
+  })();
+
+  if (fromOutputs && String(fromOutputs).trim()) {
+    return String(fromOutputs).trim().replace(/^"+|"+$/g, '');
+  }
+
+  // Legacy fallbacks (kept for SDK version changes)
+  const legacy =
+    receipt?.returnValue ??
+    receipt?.result ??
+    receipt?.txExecutionResult?.returnValue ??
+    '';
+
+  return legacy ? String(legacy).trim() : '';
+}
+
 async function tryReadTxReturn(txHash: `0x${string}`): Promise<string> {
   const readClient = createReadClient();
 
@@ -298,19 +331,15 @@ export async function createListing(
     status: TransactionStatus.FINALIZED,
     interval: 3_000,
     retries: 40,
-  });
+    fullTransaction: true,
+  } as any);
 
   if ((receipt as any).txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) {
     throw new Error('Transaction failed: create_listing');
   }
 
-  const direct =
-    (receipt as any).returnValue ??
-    (receipt as any).result ??
-    (receipt as any)?.txExecutionResult?.returnValue ??
-    '';
-
-  if (direct) return String(direct);
+  const listingIdFromReceipt = extractReturnValue(receipt);
+  if (listingIdFromReceipt) return listingIdFromReceipt;
 
   return tryReadTxReturn(txHash as `0x${string}`);
 }
@@ -342,40 +371,9 @@ export async function buy(
     throw new Error('Transaction failed: buy');
   }
 
-  // Primary path: GenLayer SDK stores return value in consensus_data
-  const leaderReceipt = (receipt as any)?.consensus_data?.leader_receipt;
-  const eqOutputs = leaderReceipt?.eq_outputs;
+  const fromReceipt = extractReturnValue(receipt);
+  if (fromReceipt) return fromReceipt;
 
-  // eq_outputs can be an array or object — find the string value
-  const fromOutputs = (() => {
-    if (!eqOutputs) return '';
-    if (typeof eqOutputs === 'string') return eqOutputs;
-    if (Array.isArray(eqOutputs) && eqOutputs.length > 0) {
-      const v = eqOutputs[0];
-      return typeof v === 'string' ? v : (v?.result ?? v?.value ?? '');
-    }
-    if (typeof eqOutputs === 'object') {
-      return (eqOutputs as any)?.result ?? (eqOutputs as any)?.value ?? '';
-    }
-    return '';
-  })();
-
-  if (fromOutputs && String(fromOutputs).trim()) {
-    const raw = String(fromOutputs).trim();
-    // Strip surrounding quotes if JSON-serialised string
-    return raw.replace(/^"+|"+$/g, '');
-  }
-
-  // Fallback: older receipt shape
-  const direct =
-    (receipt as any).returnValue ??
-    (receipt as any).result ??
-    (receipt as any)?.txExecutionResult?.returnValue ??
-    '';
-
-  if (direct) return String(direct).trim();
-
-  // Last resort: debug trace
   const traced = await tryReadTxReturn(txHash as `0x${string}`);
   if (traced) return traced;
 
@@ -683,37 +681,18 @@ export async function evaluateWithJudge(
     status: TransactionStatus.FINALIZED,
     interval: 3_000,
     retries: 60,
-  });
+    fullTransaction: true,
+  } as any);
 
   if ((receipt as any).txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) {
     throw new Error('Judge transaction failed');
   }
 
-  const direct =
-    (receipt as any).returnValue ??
-    (receipt as any).result ??
-    (receipt as any)?.txExecutionResult?.returnValue ??
-    findReturnValueDeep(receipt);
+  const judgeRaw = extractReturnValue(receipt) ?? (await tryReadTxReturn(txHash as `0x${string}`));
 
-  if (direct) {
-    const parsed = safeParseJson(decodeHexString(direct));
-
-    if (typeof parsed === 'object' && parsed !== null) {
-      return parsed as JudgeVerdict;
-    }
-
-    return String(parsed);
-  }
-
-  const traced = await tryReadTxReturn(txHash as `0x${string}`);
-
-  if (traced) {
-    const parsed = safeParseJson(decodeHexString(traced));
-
-    if (typeof parsed === 'object' && parsed !== null) {
-      return parsed as JudgeVerdict;
-    }
-
+  if (judgeRaw) {
+    const parsed = safeParseJson(decodeHexString(judgeRaw));
+    if (typeof parsed === 'object' && parsed !== null) return parsed as JudgeVerdict;
     return String(parsed);
   }
 
