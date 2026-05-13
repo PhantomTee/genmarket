@@ -196,7 +196,8 @@ export async function voteSeller(
 export async function buy(
   writeClient: ReturnType<typeof createClient>,
   listingId: string,
-  priceWei: bigint
+  priceWei: bigint,
+  buyerAddress?: string
 ): Promise<string> {
   const receipt = await writeAndWait(writeClient, {
     address: marketplaceAddress(),
@@ -204,8 +205,20 @@ export async function buy(
     args: [listingId],
     value: priceWei,
   });
-  // escrow_id is deterministic: "{listing_id}_{buyer_address}" — also returned by contract
-  return (receipt as any).returnValue ?? '';
+
+  const returned =
+    (receipt as any).returnValue ??
+    (receipt as any).result ??
+    (receipt as any)?.txExecutionResult?.returnValue ??
+    '';
+
+  if (returned) return String(returned);
+
+  if (buyerAddress) {
+    return `${listingId}_${buyerAddress}`;
+  }
+
+  return '';
 }
 
 export async function confirmPurchase(

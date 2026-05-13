@@ -6,8 +6,9 @@ import { buy, confirmPurchase, voteSeller } from '../lib/genlayer';
 import { formatGEN } from '../lib/encryption';
 
 interface Props {
-  listingId: string;
-  price: number;        // wei
+  listingId: string;          // DB id, used for UI/localStorage/backend
+  onchainListingId?: string;  // Marketplace id, used for buy()
+  price: number;              // wei
   ipfsCid: string;
   listingTitle: string;
   onClose: () => void;
@@ -21,20 +22,19 @@ interface HashInfo {
   hashMatch: boolean | null;
 }
 
-export default function PaymentModal({ listingId, price, ipfsCid, listingTitle, onClose }: Props) {
+export default function PaymentModal({ listingId, onchainListingId, price, ipfsCid, listingTitle, onClose }: Props) {
   const { address, writeClient } = useWallet();
   const [step, setStep] = useState<Step>('escrow');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [hashInfo, setHashInfo] = useState<HashInfo | null>(null);
+  const [escrowId, setEscrowId] = useState<string>('');
 
   // Voting state (shown after download)
   const [voting, setVoting] = useState(false);
   const [voted, setVoted] = useState<'up' | 'down' | null>(null);
   const [voteError, setVoteError] = useState<string | null>(null);
-
-  const escrowId = address ? `${listingId}_${address.toLowerCase()}` : '';
 
   async function handleLockEscrow() {
     if (!writeClient || !address) {
@@ -44,7 +44,25 @@ export default function PaymentModal({ listingId, price, ipfsCid, listingTitle, 
     setBusy(true);
     setError(null);
     try {
-      await buy(writeClient, listingId, BigInt(price));
+      const chainId = onchainListingId || (/^[0-9]+$/.test(listingId) ? listingId : '');
+
+      if (!chainId) {
+        throw new Error('Listing is not linked to an on-chain id yet.');
+      }
+
+      const returnedEscrowId = await buy(writeClient, chainId, BigInt(price), address);
+      const finalEscrowId = String(returnedEscrowId || '');
+
+      if (!finalEscrowId) {
+        throw new Error('Buy transaction completed, but escrow id was not returned.');
+      }
+      if (!chainId) {
+        throw new Error('Listing is not linked to an on-chain id yet.');
+      }
+
+      setEscrowId(finalEscrowId);
+      localStorage.setItem(`genmarket_escrow_${listingId}`, finalEscrowId);
+
       setStep('confirm');
     } catch (e: any) {
       setError(e.message);
@@ -58,6 +76,15 @@ export default function PaymentModal({ listingId, price, ipfsCid, listingTitle, 
     setBusy(true);
     setError(null);
     try {
+      const savedEscrowId =
+        escrowId ||
+        localStorage.getItem(`genmarket_escrow_${listingId}`) ||
+        '';
+
+      if (!savedEscrowId) {
+        throw new Error('No escrow found. Lock payment first.');
+      }
+
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
       if (!backendUrl) throw new Error('NEXT_PUBLIC_BACKEND_URL is not configured');
 
@@ -65,7 +92,12 @@ export default function PaymentModal({ listingId, price, ipfsCid, listingTitle, 
       const res = await fetch(`${backendUrl}/api/payments/confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ listing_id: listingId, buyer_address: address }),
+        body: JSON.stringify({
+          listing_id: listingId,
+          onchain_listing_id: onchainListingId,
+          escrow_id: savedEscrowId,
+          buyer_address: address,
+        }),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -79,7 +111,7 @@ export default function PaymentModal({ listingId, price, ipfsCid, listingTitle, 
       setHashInfo({ sourceHash, verifiedHash, hashMatch });
 
       // Release funds to seller on-chain
-      await confirmPurchase(writeClient, escrowId);
+      await confirmPurchase(writeClient, savedEscrowId);
 
       // Persist purchase in localStorage
       try {
@@ -92,7 +124,7 @@ export default function PaymentModal({ listingId, price, ipfsCid, listingTitle, 
             title: listingTitle,
             price,
             ipfs_cid: ipfsCid,
-            escrow_id: escrowId,
+            escrow_id: savedEscrowId,
             source_hash: sourceHash,
           },
         ];
@@ -112,7 +144,16 @@ export default function PaymentModal({ listingId, price, ipfsCid, listingTitle, 
     setVoting(true);
     setVoteError(null);
     try {
-      await voteSeller(writeClient, escrowId, isUpvote);
+      const savedEscrowId =
+        escrowId ||
+        localStorage.getItem(`genmarket_escrow_${listingId}`) ||
+        '';
+
+      if (!savedEscrowId) {
+        throw new Error('No escrow found for this purchase.');
+      }
+
+      await voteSeller(writeClient, savedEscrowId, isUpvote);
       setVoted(isUpvote ? 'up' : 'down');
     } catch (e: any) {
       setVoteError(e.message);
