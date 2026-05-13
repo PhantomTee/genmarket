@@ -18,21 +18,28 @@ interface DemoSession {
 }
 
 function normalizeVerdict(raw: any): Verdict {
-  const value = String(raw?.verdict || '').toLowerCase();
+  // Unwrap nested JSON strings (GenLayer may double-encode the return value)
+  let value = raw;
+  for (let i = 0; i < 3; i++) {
+    if (typeof value !== 'string') break;
+    try { value = JSON.parse(value); } catch { break; }
+  }
+
+  const verdictValue = String(value?.verdict || '').toLowerCase();
   const verdict =
-    value === 'match' || value === 'partial' || value === 'mismatch'
-      ? (value as Verdict['verdict'])
+    verdictValue === 'match' || verdictValue === 'partial' || verdictValue === 'mismatch'
+      ? (verdictValue as Verdict['verdict'])
       : 'partial';
-  const confidence = Number(raw?.confidence);
+  const confidence = Number(value?.confidence);
   return {
     verdict,
     confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(100, confidence)) : 50,
     explanation:
-      typeof raw?.explanation === 'string'
-        ? raw.explanation
+      typeof value?.explanation === 'string'
+        ? value.explanation
         : 'The Judge returned an incomplete response.',
-    caveats: Array.isArray(raw?.caveats)
-      ? raw.caveats.filter((x: unknown) => typeof x === 'string')
+    caveats: Array.isArray(value?.caveats)
+      ? value.caveats.filter((x: unknown) => typeof x === 'string')
       : [],
   };
 }
@@ -90,12 +97,13 @@ export default function ListingClient({ id }: Props) {
     setVerdict(null);
     setJudgeError(null);
     try {
+      // Use real code preview if stored; otherwise tell the Judge no code is available
+      // so it does not receive description text masquerading as source code.
       const sourceCodePreview =
         (listing as any).preview_code ||
         (listing as any).visible_code_preview ||
         (listing as any).code_preview ||
-        listing.description ||
-        '';
+        '[Source code preview not available — evaluate based on seller description only]';
       const result = await evaluateWithJudge(
         writeClient,
         sourceCodePreview,

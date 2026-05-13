@@ -401,6 +401,21 @@ function judgeAddress(): `0x${string}` {
   return addr as `0x${string}`;
 }
 
+function parseMaybeJson(value: unknown): unknown {
+  let current = value;
+  for (let i = 0; i < 3; i++) {
+    if (typeof current !== 'string') return current;
+    const trimmed = current.trim();
+    if (!trimmed) return null;
+    try {
+      current = JSON.parse(trimmed);
+    } catch {
+      return current;
+    }
+  }
+  return current;
+}
+
 export async function evaluateWithJudge(
   writeClient: ReturnType<typeof createClient>,
   sourceCodePreview: string,
@@ -422,6 +437,8 @@ export async function evaluateWithJudge(
     retries: 40,
   });
 
+  console.log('Judge receipt:', receipt);
+
   if ((receipt as any).txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) {
     const stderr =
       (receipt as any)?.txExecutionResult?.stderr ||
@@ -434,10 +451,18 @@ export async function evaluateWithJudge(
     );
   }
 
-  const verdict =
+  const rawVerdict =
     (receipt as any).returnValue ??
     (receipt as any).result ??
+    (receipt as any)?.txExecutionResult?.returnValue ??
+    (receipt as any)?.txExecutionResult?.result ??
     null;
 
-  return typeof verdict === 'string' ? JSON.parse(verdict) : verdict;
+  console.log('Judge raw verdict:', rawVerdict);
+
+  const parsed = parseMaybeJson(rawVerdict);
+
+  console.log('Judge parsed verdict:', parsed);
+
+  return parsed;
 }
