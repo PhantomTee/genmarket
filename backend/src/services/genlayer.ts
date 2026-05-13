@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { privateKeyToAccount } from 'viem/accounts';
 
 // ---------------------------------------------------------------------------
 // NOTE: genlayer-js is ESM-only. We use dynamic import() throughout so our
@@ -57,12 +56,6 @@ export interface Escrow {
 function marketplaceAddress(): string {
   const addr = process.env.MARKETPLACE_CONTRACT_ADDRESS;
   if (!addr) throw new Error('MARKETPLACE_CONTRACT_ADDRESS is not set');
-  return addr;
-}
-
-function judgeAddress(): string {
-  const addr = process.env.JUDGE_CONTRACT_ADDRESS;
-  if (!addr) throw new Error('JUDGE_CONTRACT_ADDRESS is not set');
   return addr;
 }
 
@@ -163,65 +156,4 @@ export async function callContractMethod(
     try { return JSON.parse(result); } catch { /* return as-is */ }
   }
   return result;
-}
-
-// ---------------------------------------------------------------------------
-// JudgeContract — write tx via backend service wallet (Option A)
-// ---------------------------------------------------------------------------
-
-async function getWriteClient() {
-  const [{ createClient }, { studionet }] = await Promise.all([
-    import('genlayer-js'),
-    import('genlayer-js/chains'),
-  ]);
-
-  const pk = process.env.BACKEND_PRIVATE_KEY;
-  if (!pk) throw new Error('BACKEND_PRIVATE_KEY is not set');
-  const account = privateKeyToAccount(pk as `0x${string}`);
-
-  return createClient({ chain: studionet, account });
-}
-
-export async function evaluateCode(
-  sourceCode: string,
-  sellerDescription: string,
-  buyerRequirement: string
-): Promise<string> {
-  const { TransactionStatus, ExecutionResult } = await import('genlayer-js/types');
-  const client = await getWriteClient();
-
-  const txHash = await client.writeContract({
-    address: judgeAddress() as `0x${string}`,
-    functionName: 'evaluate',
-    args: [sourceCode, sellerDescription, buyerRequirement],
-    value: 0n,
-  });
-
-  const receipt = await client.waitForTransactionReceipt({
-    hash: txHash,
-    status: TransactionStatus.FINALIZED,
-    interval: 3_000,
-    retries: 40,
-  });
-
-  if (receipt.txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) {
-    throw new Error('JudgeContract evaluation failed during execution');
-  }
-
-  const tx = await client.getTransaction({ hash: txHash });
-  const messages: Array<{ value?: unknown }> = (tx as any).messages ?? [];
-  const returnMsg = [...messages].reverse().find((m) => m.value !== undefined);
-
-  if (returnMsg?.value !== undefined) {
-    return typeof returnMsg.value === 'string'
-      ? returnMsg.value
-      : JSON.stringify(returnMsg.value);
-  }
-
-  const fallback = (receipt as any).returnValue ?? (receipt as any).result;
-  if (fallback !== undefined) {
-    return typeof fallback === 'string' ? fallback : JSON.stringify(fallback);
-  }
-
-  throw new Error('Could not extract verdict from judge transaction — check SDK version');
 }

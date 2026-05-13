@@ -11,7 +11,6 @@ process.on('uncaughtException', (err) => {
 import cors from 'cors';
 import { initDb } from './db/schema.js';
 import listingsRouter from './routes/listings.js';
-import judgeRouter from './routes/judge.js';
 import paymentsRouter from './routes/payments.js';
 import contractsRouter from './routes/contracts.js';
 import { lintContract } from './services/lint.js';
@@ -44,7 +43,6 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/api/listings', listingsRouter);
-app.use('/api/judge', judgeRouter);
 app.use('/api/payments', paymentsRouter);
 app.use('/api/contracts', contractsRouter);
 
