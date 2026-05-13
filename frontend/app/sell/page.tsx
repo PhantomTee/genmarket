@@ -235,34 +235,64 @@ export default function SellPage() {
         source_hash: sourceHash,
       });
 
-      // If the contract didn't return the listing ID, derive it from all listings
-      if (!chainId) {
+      // ── Verify the returned chainId is correct ──────────────────────────
+      // The contract return value is sometimes a tx nonce, not the listing
+      // slot ID. We verify by reading back the listing and matching source_hash.
+      // If it doesn't match (or nothing was returned), scan all listings and
+      // find the one that matches this seller + source_hash.
+      const verifiedChainId = await (async () => {
         const readClient = createReadClient();
-        const rawListings = await readClient.readContract({
-          address: (process.env.NEXT_PUBLIC_MARKETPLACE_CONTRACT_ADDRESS ?? '') as `0x${string}`,
-          functionName: 'get_all_listings_json',
-          args: [],
-        });
+        const contractAddr = (process.env.NEXT_PUBLIC_MARKETPLACE_CONTRACT_ADDRESS ?? '') as `0x${string}`;
 
-        const parsedListings =
-          typeof rawListings === 'string' ? JSON.parse(rawListings) : rawListings;
+        // First try: trust the return value if it matches
+        if (chainId) {
+          try {
+            const rawOne = await readClient.readContract({
+              address: contractAddr,
+              functionName: 'get_listing_json',
+              args: [chainId],
+            } as any);
+            const listing = typeof rawOne === 'string' ? JSON.parse(rawOne) : rawOne;
+            if (listing?.source_hash === sourceHash) return chainId;
+          } catch { /* fall through */ }
+        }
 
-        const listings = Array.isArray(parsedListings) ? parsedListings : [];
-        const newest = listings[listings.length - 1];
+        // Second try: scan all listings, find the one matching seller + source_hash
+        try {
+          const rawAll = await readClient.readContract({
+            address: contractAddr,
+            functionName: 'get_all_listings_json',
+            args: [],
+          } as any);
+          const all: any[] = typeof rawAll === 'string' ? JSON.parse(rawAll) : rawAll;
+          if (Array.isArray(all)) {
+            // Walk newest-first to find the freshly created one
+            for (let i = all.length - 1; i >= 0; i--) {
+              const l = all[i];
+              if (
+                l?.source_hash === sourceHash &&
+                String(l?.seller ?? '').toLowerCase() === (address ?? '').toLowerCase()
+              ) {
+                return String(l.id);
+              }
+            }
+          }
+        } catch { /* fall through */ }
 
-        chainId = newest?.id ? String(newest.id) : '';
-      }
+        // Last resort: return whatever the contract gave us (may still be wrong)
+        return chainId;
+      })();
 
-      if (chainId) {
+      if (verifiedChainId) {
         await fetch(
           `${process.env.NEXT_PUBLIC_BACKEND_URL ?? ''}/api/listings/${listingId}/chain-id`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ onchain_listing_id: chainId }),
+            body: JSON.stringify({ onchain_listing_id: verifiedChainId }),
           }
         );
-        setChainListingId(chainId);
+        setChainListingId(verifiedChainId);
       }
       localStorage.removeItem(DRAFT_KEY);
       localStorage.removeItem(FORM_DRAFT_KEY);
