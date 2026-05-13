@@ -64,12 +64,26 @@ export default function ContractPlayground({ contractAddress }: Props) {
     setLoadingAbi(true);
     setAbiError(null);
     getContractABI(contractAddress)
-      .then((a) => {
-        setAbi(a);
-        const firstReadonly = a.find((m) => m.readonly);
+      .then((response) => {
+        const methods = Array.isArray(response)
+          ? response
+          : Array.isArray((response as any)?.abi)
+            ? (response as any).abi
+            : Array.isArray((response as any)?.methods)
+              ? (response as any).methods
+              : Array.isArray((response as any)?.schema)
+                ? (response as any).schema
+                : [];
+
+        setAbi(methods as ABI);
+
+        const firstReadonly = methods.find((m: ABIMethod) => m.readonly);
+
         if (firstReadonly) {
           setSelectedMethod(firstReadonly);
           setArgValues({});
+        } else {
+          setSelectedMethod(null);
         }
       })
       .catch((e) => setAbiError(e.message))
@@ -89,7 +103,9 @@ export default function ContractPlayground({ contractAddress }: Props) {
     setResult(null);
     setCallError(null);
     try {
-      const args = selectedMethod.inputs.map((p) => {
+      const methodInputs = Array.isArray(selectedMethod.inputs) ? selectedMethod.inputs : [];
+
+      const args = methodInputs.map((p) => {
         const raw = argValues[p.name] ?? '';
         const t = p.type.toLowerCase();
         if (t === 'bool') return raw === 'true';
@@ -156,9 +172,9 @@ export default function ContractPlayground({ contractAddress }: Props) {
       {/* Inputs + call */}
       {selectedMethod && (
         <div className="p-5 flex flex-col gap-4">
-          {selectedMethod.inputs.length > 0 && (
+          {(Array.isArray(selectedMethod.inputs) ? selectedMethod.inputs : []).length > 0 && (
             <div className="flex flex-col gap-3">
-              {selectedMethod.inputs.map((p) => (
+              {(Array.isArray(selectedMethod.inputs) ? selectedMethod.inputs : []).map((p) => (
                 <InputField
                   key={p.name}
                   param={p}
