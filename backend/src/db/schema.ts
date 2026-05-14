@@ -129,6 +129,16 @@ export async function getListingByChainId(chainListingId: string): Promise<DbLis
   return result.rows[0] as DbListing | undefined;
 }
 
+/** Return all DB listings for a seller address (case-insensitive). Used by dashboard
+ *  so new listings are visible immediately, before on-chain tx finalization. */
+export async function getListingsBySellerFromDb(sellerAddress: string): Promise<DbListing[]> {
+  const result = await pool.query(
+    `SELECT * FROM public.listings WHERE lower(seller_pubkey) = lower($1) ORDER BY created_at DESC`,
+    [sellerAddress]
+  );
+  return result.rows as DbListing[];
+}
+
 // ---------------------------------------------------------------------------
 // Purchases
 // ---------------------------------------------------------------------------

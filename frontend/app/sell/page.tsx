@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import WalletConnect from '../../components/WalletConnect';
+import Navbar from '../../components/Navbar';
 import { useWallet } from '../../lib/wallet-context';
 import { parseGEN } from '../../lib/encryption';
 import { createListing, deployContract, createReadClient } from '../../lib/genlayer';
@@ -56,6 +56,8 @@ export default function SellPage() {
 
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submitElapsed, setSubmitElapsed] = useState(0);   // seconds since tx submitted
+  const submitTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [lintStatus, setLintStatus] = useState<LintStatus>('idle');
@@ -222,7 +224,13 @@ export default function SellPage() {
   async function handleCreateListing() {
     if (!writeClient || !ipfsCid || !listingId || !sourceHash || !previewCode) return;
     setSubmitting(true);
+    setSubmitElapsed(0);
     setError(null);
+
+    // Start elapsed-time counter so the user can see progress during the long wait
+    if (submitTimerRef.current) clearInterval(submitTimerRef.current);
+    submitTimerRef.current = setInterval(() => setSubmitElapsed((s) => s + 1), 1_000);
+
     try {
       let chainId = await createListing(writeClient, {
         title: form.title,
@@ -300,6 +308,7 @@ export default function SellPage() {
     } catch (e: any) {
       setError(e.message);
     } finally {
+      if (submitTimerRef.current) { clearInterval(submitTimerRef.current); submitTimerRef.current = null; }
       setSubmitting(false);
     }
   }
@@ -309,17 +318,7 @@ export default function SellPage() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <nav className="flex items-center justify-between px-6 md:px-12 py-5 border-b border-neutral-200 dark:border-neutral-700">
-        <Link href="/" className="text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
-          GenMarket<span className="text-neutral-400 dark:text-neutral-500">.</span>
-        </Link>
-        <div className="flex items-center gap-4">
-          <Link href="/editor" className="text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors hidden sm:block">
-            ← Editor
-          </Link>
-          <WalletConnect />
-        </div>
-      </nav>
+      <Navbar />
 
       <main className="flex-1 flex flex-col items-center px-6 py-12">
         <div className="w-full max-w-lg">
@@ -594,14 +593,43 @@ export default function SellPage() {
           {step === 5 && (
             <div className="flex flex-col gap-5">
               <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">Publish to GenLayer</h1>
+
+              {/* GenLayer timing notice — always visible before submission */}
+              {!submitting && (
+                <div className="text-sm text-neutral-500 dark:text-neutral-400 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl p-4 flex flex-col gap-1">
+                  <p className="font-medium text-neutral-700 dark:text-neutral-300">⏱ What to expect</p>
+                  <p>Publishing requires GenLayer consensus. This typically takes <strong>2–5 minutes</strong> — do not close this tab.</p>
+                </div>
+              )}
+
               {!writeClient && (
                 <p className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-xl p-3">
                   Connect your wallet to publish.
                 </p>
               )}
-              <button onClick={handleCreateListing} disabled={submitting || !writeClient}
-                className="w-full bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200 font-semibold py-3.5 rounded-2xl disabled:opacity-50">
-                {submitting ? 'Waiting for wallet…' : 'Publish listing'}
+
+              {/* Live progress during TX wait */}
+              {submitting && (
+                <div className="flex flex-col gap-3 items-center py-4">
+                  <div className="w-10 h-10 border-2 border-neutral-200 dark:border-neutral-700 border-t-neutral-900 dark:border-t-neutral-100 rounded-full animate-spin" />
+                  <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                    Waiting for GenLayer consensus…
+                  </p>
+                  <p className="text-xs text-neutral-400 dark:text-neutral-500 tabular-nums">
+                    {submitElapsed}s elapsed · typically 2–5 min
+                  </p>
+                  <p className="text-xs text-neutral-400 dark:text-neutral-500 text-center max-w-xs">
+                    Validators are reaching consensus on your transaction. Do not close or refresh this tab.
+                  </p>
+                </div>
+              )}
+
+              <button
+                onClick={handleCreateListing}
+                disabled={submitting || !writeClient}
+                className="w-full bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200 font-semibold py-3.5 rounded-2xl disabled:opacity-50 transition-colors"
+              >
+                {submitting ? `Publishing… (${submitElapsed}s)` : 'Publish listing'}
               </button>
             </div>
           )}

@@ -79,9 +79,62 @@ router.post('/:id/chain-id', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/listings
-router.get('/', async (_req: Request, res: Response) => {
+// GET /api/listings?seller=0x... — returns listings for a seller from the DB
+// This is used by the dashboard so new listings appear immediately, even before
+// on-chain finalization. Falls back to chain data once onchain_listing_id is set.
+router.get('/', async (req: Request, res: Response) => {
   try {
+    // If ?seller= is provided, query the DB by seller address for instant dashboard visibility
+    const sellerParam = req.query.seller as string | undefined;
+
+    if (sellerParam && sellerParam.trim()) {
+      const { getListingsBySellerFromDb } = await import('../db/schema.js');
+      const dbRows = await getListingsBySellerFromDb(sellerParam.trim().toLowerCase());
+
+      // For rows that have an onchain_listing_id, enrich with chain data
+      const enriched = await Promise.all(
+        dbRows.map(async (row: any) => {
+          if (row.onchain_listing_id) {
+            try {
+              const chainData = await getListing(row.onchain_listing_id);
+              return {
+                ...chainData,
+                id: row.listing_id,
+                listing_id: row.listing_id,
+                onchain_listing_id: row.onchain_listing_id,
+                preview_code: (chainData as any).preview_code || row.preview_code || '',
+                source_hash: (chainData as any).source_hash || row.source_hash || '',
+              };
+            } catch {
+              // Chain read failed — return DB-only data with pending status
+            }
+          }
+          // Not yet on-chain — return pending placeholder so seller sees it immediately
+          return {
+            id: row.listing_id,
+            listing_id: row.listing_id,
+            onchain_listing_id: null,
+            seller: row.seller_pubkey,
+            title: row.preview_code ? '(Pending confirmation…)' : '(Draft)',
+            description: '',
+            price: 0,
+            category: '',
+            demo_contract_address: '',
+            ipfs_cid: row.ipfs_cid,
+            status: 'pending_onchain',
+            preview_code: row.preview_code || '',
+            source_hash: row.source_hash || '',
+            seller_upvotes: '0',
+            seller_downvotes: '0',
+            seller_score: 'none',
+          };
+        })
+      );
+
+      return res.json(enriched);
+    }
+
+    // Default: return all active on-chain listings (used by Browse/Home)
     const listings = await getAllListings();
 
     const safeListings = Array.isArray(listings) ? listings : [];

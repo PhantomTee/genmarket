@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import WalletConnect from '../components/WalletConnect';
+import Navbar from '../components/Navbar';
 import ListingCard from '../components/ListingCard';
 import { Listing } from '../lib/genlayer';
 
@@ -24,21 +24,7 @@ export default async function HomePage() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* Nav */}
-      <nav className="flex items-center justify-between px-6 md:px-12 py-5 border-b border-neutral-200 dark:border-neutral-700">
-        <Link href="/" className="text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
-          GenMarket<span className="text-neutral-400 dark:text-neutral-500">.</span>
-        </Link>
-        <div className="flex items-center gap-4 sm:gap-6">
-          <div className="hidden sm:flex items-center gap-6">
-            <Link href="/browse" className="text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors">Browse</Link>
-            <Link href="/sell" className="text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors">Sell</Link>
-            <Link href="/purchases" className="text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors">Recent</Link>
-            <Link href="/editor" className="text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors">Editor</Link>
-          </div>
-          <WalletConnect />
-        </div>
-      </nav>
+      <Navbar />
 
       {/* Hero */}
       <section className="flex-1 flex flex-col items-center justify-center text-center px-6 py-24 md:py-36">

@@ -345,7 +345,7 @@ export async function createListing(
     hash: txHash,
     status: TransactionStatus.FINALIZED,
     interval: 3_000,
-    retries: 40,
+    retries: 100,          // 5 min total — GenLayer Studionet can be slow
     fullTransaction: true,
   } as any);
 

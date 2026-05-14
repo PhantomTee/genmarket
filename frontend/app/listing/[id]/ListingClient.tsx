@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback, useState } from 'react';
 import Link from 'next/link';
-import WalletConnect from '../../../components/WalletConnect';
+import Navbar from '../../../components/Navbar';
 import VerdictCard, { Verdict } from '../../../components/VerdictCard';
 import PaymentModal from '../../../components/PaymentModal';
 import { Listing, evaluateWithJudge } from '../../../lib/genlayer';
@@ -206,15 +206,7 @@ export default function ListingClient({ id }: Props) {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F7F4EF] dark:bg-[#0c0c0c]">
-      <nav className="flex items-center justify-between px-6 md:px-12 py-5 border-b border-neutral-200 dark:border-neutral-700 sticky top-0 bg-[#F7F4EF] dark:bg-[#0c0c0c] z-10">
-        <Link href="/" className="text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
-          GenMarket<span className="text-neutral-400 dark:text-neutral-500">.</span>
-        </Link>
-        <div className="flex items-center gap-4">
-          <Link href="/browse" className="text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors">← Browse</Link>
-          <WalletConnect />
-        </div>
-      </nav>
+      <Navbar />
 
       <main className="flex-1 px-6 md:px-12 py-10 max-w-3xl mx-auto w-full">
 
