@@ -152,6 +152,7 @@ router.get('/:id', async (req: Request, res: Response) => {
         ipfs_cid: dbRow.ipfs_cid || listing.ipfs_cid,
         preview_code: (listing as any).preview_code || dbRow.preview_code || '',
         source_hash: (listing as any).source_hash || dbRow.source_hash || '',
+        create_tx_hash: dbRow.create_tx_hash || null,
       });
     }
 

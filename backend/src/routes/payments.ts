@@ -105,6 +105,7 @@ router.post('/confirm', async (req: Request, res: Response) => {
         escrow_id: finalEscrowId,
         buyer_address,
         seller_address: dbRow.seller_pubkey || undefined,
+        price: escrow.amount != null ? String(escrow.amount) : undefined,
         ipfs_cid: dbRow.ipfs_cid,
         source_hash: sourceHash,
         status: 'released',

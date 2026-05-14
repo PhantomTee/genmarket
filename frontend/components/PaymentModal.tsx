@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useWallet } from '../lib/wallet-context';
-import { buy, confirmPurchase, voteSeller, getEscrow } from '../lib/genlayer';
+import { buy, confirmPurchase, refund, voteSeller, getEscrow } from '../lib/genlayer';
 import { formatGEN } from '../lib/encryption';
 
 interface Props {
@@ -42,6 +42,9 @@ export default function PaymentModal({
   const [voting, setVoting] = useState(false);
   const [voted, setVoted] = useState<'up' | 'down' | null>(null);
   const [voteError, setVoteError] = useState<string | null>(null);
+
+  const [refunding, setRefunding] = useState(false);
+  const [refundError, setRefundError] = useState<string | null>(null);
 
   function escrowStorageKey() {
     return `genmarket_escrow_${listingId}`;
@@ -247,6 +250,27 @@ export default function PaymentModal({
     }
   }
 
+  // Feature 4: Refund from within the modal
+  async function handleRefundEscrow() {
+    if (!writeClient || !address) return;
+    const savedEscrowId = escrowId || localStorage.getItem(escrowStorageKey()) || '';
+    if (!savedEscrowId) { setRefundError('No escrow found.'); return; }
+
+    setRefunding(true);
+    setRefundError(null);
+    try {
+      await refund(writeClient, savedEscrowId);
+      localStorage.removeItem(escrowStorageKey());
+      setEscrowId('');
+      setError(null);
+      setStep('escrow');
+    } catch (e: any) {
+      setRefundError(e.message || 'Refund failed');
+    } finally {
+      setRefunding(false);
+    }
+  }
+
   const shownEscrowId = escrowId || 'Verified after payment';
 
   return (
@@ -343,11 +367,30 @@ export default function PaymentModal({
 
               <button
                 onClick={handleConfirmPurchase}
-                disabled={busy}
+                disabled={busy || refunding}
                 className="w-full bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200 font-semibold py-3.5 rounded-2xl hover:bg-neutral-700 transition-colors disabled:opacity-50"
               >
-                {busy ? 'Confirming…' : 'Release payment & download'}
+                {busy ? 'Confirming… (polling on-chain)' : 'Release payment & download'}
               </button>
+
+              {/* Feature 4: Refund escape hatch */}
+              <div className="border-t border-neutral-200 dark:border-neutral-700 pt-4">
+                <p className="text-xs text-neutral-400 dark:text-neutral-500 mb-2">
+                  Changed your mind? You can request a full refund while escrow is locked.
+                </p>
+                {refundError && (
+                  <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl p-2 mb-2">
+                    {refundError}
+                  </p>
+                )}
+                <button
+                  onClick={handleRefundEscrow}
+                  disabled={refunding || busy}
+                  className="w-full text-sm text-red-600 border border-red-200 hover:border-red-400 hover:bg-red-50 py-2.5 rounded-xl transition-colors disabled:opacity-50"
+                >
+                  {refunding ? 'Requesting refund…' : 'Request Refund'}
+                </button>
+              </div>
             </>
           )}
 

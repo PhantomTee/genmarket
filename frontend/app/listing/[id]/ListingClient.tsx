@@ -17,14 +17,14 @@ interface DemoSession {
   success: boolean;
 }
 
+const EXPLORER = 'https://studio.genlayer.com/transactions';
+
 function normalizeVerdict(raw: any): Verdict {
-  // Unwrap nested JSON strings (GenLayer may double-encode the return value)
   let value = raw;
   for (let i = 0; i < 3; i++) {
     if (typeof value !== 'string') break;
     try { value = JSON.parse(value); } catch { break; }
   }
-
   const verdictValue = String(value?.verdict || '').toLowerCase();
   const verdict =
     verdictValue === 'match' || verdictValue === 'partial' || verdictValue === 'mismatch'
@@ -44,6 +44,7 @@ function normalizeVerdict(raw: any): Verdict {
   };
 }
 
+// ── Feature 5: Seller reputation badge ─────────────────────────────────────
 function SellerReputation({ listing }: { listing: Listing }) {
   const upvotes = Number(listing.seller_upvotes ?? 0);
   const downvotes = Number(listing.seller_downvotes ?? 0);
@@ -60,14 +61,30 @@ function SellerReputation({ listing }: { listing: Listing }) {
   const score = Math.round((upvotes / total) * 100);
   const cls =
     score >= 70
-      ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+      ? 'text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-950 dark:border-emerald-800'
       : score >= 40
-      ? 'text-amber-700 bg-amber-50 border-amber-200'
-      : 'text-red-700 bg-red-50 border-red-200';
+      ? 'text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-950 dark:border-amber-800'
+      : 'text-red-700 bg-red-50 border-red-200 dark:text-red-400 dark:bg-red-950 dark:border-red-800';
 
   return (
     <span className={`inline-flex items-center gap-1 text-xs font-medium border px-2.5 py-1 rounded-full ${cls}`}>
-      ★ {score}% source match ({total} {total === 1 ? 'rating' : 'ratings'})
+      ★ {score}% ({total} {total === 1 ? 'rating' : 'ratings'})
+    </span>
+  );
+}
+
+// ── Feature 1: Status badge ─────────────────────────────────────────────────
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    active:   { label: '🟢 Available',          cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800' },
+    pending:  { label: '🟡 Purchase in progress', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400 border-amber-200 dark:border-amber-800' },
+    sold:     { label: '✅ Sold',                cls: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400 border-blue-200 dark:border-blue-800' },
+    removed:  { label: '⛔ Removed',             cls: 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700' },
+  };
+  const { label, cls } = map[status] ?? { label: status, cls: 'bg-neutral-100 text-neutral-500 border-neutral-200' };
+  return (
+    <span className={`text-xs font-semibold px-3 py-1 rounded-full border ${cls}`}>
+      {label}
     </span>
   );
 }
@@ -86,6 +103,8 @@ export default function ListingClient({ id }: Props) {
 
   const [showPayment, setShowPayment] = useState(false);
   const [copiedAddr, setCopiedAddr] = useState(false);
+  // Feature 9: share state
+  const [copied, setCopied] = useState(false);
   const [demoSession, setDemoSession] = useState<DemoSession | null>(null);
 
   const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL ?? '';
@@ -95,7 +114,6 @@ export default function ListingClient({ id }: Props) {
       .then((r) => r.json())
       .then((data) => {
         if (data.error) throw new Error(data.error);
-        // Support both direct response and wrapped { listing: ... } shape
         const listingData = data?.listing ?? data;
         if (!listingData || typeof listingData !== 'object' || !listingData.id) {
           throw new Error('Invalid listing response from backend');
@@ -115,7 +133,6 @@ export default function ListingClient({ id }: Props) {
     return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVisible); };
   }, [fetchListing]);
 
-  // Read prior demo session from sessionStorage
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem(`genmarket_demo_test_${id}`);
@@ -126,22 +143,15 @@ export default function ListingClient({ id }: Props) {
   async function handleEvaluate() {
     if (!requirement.trim() || !listing) return;
     if (!writeClient) { await connect(); return; }
-
     if (!listing.preview_code) {
       setJudgeError('This listing has no public preview code. The seller must add a preview before AI evaluation is available.');
       return;
     }
-
     setEvaluating(true);
     setVerdict(null);
     setJudgeError(null);
     try {
-      const result = await evaluateWithJudge(
-        writeClient,
-        listing.preview_code,
-        listing.description,
-        requirement,
-      );
+      const result = await evaluateWithJudge(writeClient, listing.preview_code, listing.description, requirement);
       setVerdict(normalizeVerdict(result));
     } catch (e: any) {
       setJudgeError(e.message);
@@ -154,6 +164,22 @@ export default function ListingClient({ id }: Props) {
     navigator.clipboard.writeText(addr);
     setCopiedAddr(true);
     setTimeout(() => setCopiedAddr(false), 1500);
+  }
+
+  // Feature 9: share
+  function handleShare() {
+    const url = typeof window !== 'undefined' ? window.location.href : '';
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  function handleShareX() {
+    if (!listing) return;
+    const url = typeof window !== 'undefined' ? window.location.href : '';
+    const text = encodeURIComponent(`Check out "${listing.title}" on GenMarket — ${formatGEN(listing.price)}\n${url}`);
+    window.open(`https://x.com/intent/tweet?text=${text}`, '_blank');
   }
 
   if (loading) {
@@ -172,8 +198,11 @@ export default function ListingClient({ id }: Props) {
     );
   }
 
-  const hasDemoContract = listing.demo_contract_address &&
-    listing.demo_contract_address !== 'pending';
+  const hasDemoContract = listing.demo_contract_address && listing.demo_contract_address !== 'pending';
+  const isAvailable = listing.status === 'active';
+  // Feature 10: explorer link
+  const createTxHash = (listing as any).create_tx_hash as string | null | undefined;
+  const explorerUrl = createTxHash ? `${EXPLORER}/${createTxHash}` : null;
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F7F4EF] dark:bg-[#0c0c0c]">
@@ -195,20 +224,36 @@ export default function ListingClient({ id }: Props) {
             <span className="text-xs font-medium bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 px-2.5 py-1 rounded-full">
               {listing.category}
             </span>
-            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
-              listing.status === 'active'
-                ? 'bg-emerald-100 text-emerald-700'
-                : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400'
-            }`}>
-              {listing.status}
-            </span>
+            {/* Feature 1: enhanced status badge */}
+            <StatusBadge status={listing.status} />
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-neutral-900 dark:text-neutral-100 leading-tight mb-2">
-            {listing.title}
-          </h1>
+
+          <div className="flex items-start justify-between gap-4 mb-2">
+            <h1 className="text-2xl sm:text-3xl font-bold text-neutral-900 dark:text-neutral-100 leading-tight">
+              {listing.title}
+            </h1>
+            {/* Feature 9: Share buttons */}
+            <div className="flex items-center gap-1 shrink-0 mt-1">
+              <button
+                onClick={handleShare}
+                title="Copy link"
+                className="text-xs px-2.5 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-neutral-500 dark:text-neutral-400 hover:border-neutral-400 dark:hover:border-neutral-500 transition-colors"
+              >
+                {copied ? '✓ Copied' : '🔗 Copy link'}
+              </button>
+              <button
+                onClick={handleShareX}
+                title="Share on X"
+                className="text-xs px-2.5 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-neutral-500 dark:text-neutral-400 hover:border-neutral-400 dark:hover:border-neutral-500 transition-colors"
+              >
+                𝕏
+              </button>
+            </div>
+          </div>
+
           <p className="text-neutral-500 dark:text-neutral-400 text-base mb-4">{listing.description}</p>
 
-          {/* Seller reputation */}
+          {/* Feature 5: Seller reputation */}
           <div className="mb-3">
             <SellerReputation listing={listing} />
           </div>
@@ -233,6 +278,17 @@ export default function ListingClient({ id }: Props) {
             <span className="inline-flex items-center gap-1 text-xs font-medium text-neutral-600 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 px-2.5 py-1 rounded-full">
               🔒 Source Encrypted
             </span>
+            {/* Feature 10: on-chain explorer link */}
+            {explorerUrl && (
+              <a
+                href={explorerUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-full hover:bg-indigo-100 transition-colors"
+              >
+                ⛓ View on Explorer ↗
+              </a>
+            )}
           </div>
         </div>
 
@@ -282,7 +338,20 @@ export default function ListingClient({ id }: Props) {
           </div>
         )}
 
-        {/* Primary action: Try Demo Contract */}
+        {/* Feature 1: Non-available listing notice */}
+        {!isAvailable && listing.status !== 'removed' && (
+          <div className={`mb-5 px-4 py-3 rounded-xl border text-sm font-medium ${
+            listing.status === 'sold'
+              ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950 dark:border-blue-800 dark:text-blue-300'
+              : 'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950 dark:border-amber-800 dark:text-amber-300'
+          }`}>
+            {listing.status === 'sold'
+              ? '✅ This contract has been sold. It is no longer available for purchase.'
+              : '🟡 A purchase is currently in progress. This listing will become available again if the buyer does not confirm.'}
+          </div>
+        )}
+
+        {/* Primary actions */}
         <div className="flex flex-col gap-3 mb-6">
           {hasDemoContract ? (
             <Link
@@ -309,12 +378,20 @@ export default function ListingClient({ id }: Props) {
             >
               {showJudge ? 'Hide AI Judge ↑' : 'Review with AI Judge ✦'}
             </button>
-            <button
-              onClick={() => setShowPayment(true)}
-              className="flex-1 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-neutral-100 font-semibold py-3 rounded-2xl hover:border-neutral-900 dark:hover:border-neutral-400 transition-colors text-sm"
-            >
-              Buy Source · {formatGEN(listing.price)}
-            </button>
+
+            {/* Feature 1: Disable buy when not active */}
+            {isAvailable ? (
+              <button
+                onClick={() => setShowPayment(true)}
+                className="flex-1 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-neutral-100 font-semibold py-3 rounded-2xl hover:border-neutral-900 dark:hover:border-neutral-400 transition-colors text-sm"
+              >
+                Buy Source · {formatGEN(listing.price)}
+              </button>
+            ) : (
+              <div className="flex-1 text-center text-sm text-neutral-400 dark:text-neutral-500 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 py-3 rounded-2xl cursor-not-allowed">
+                {listing.status === 'sold' ? 'Already sold' : 'Unavailable'}
+              </div>
+            )}
           </div>
         </div>
 
@@ -346,7 +423,7 @@ export default function ListingClient({ id }: Props) {
               <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-3">{judgeError}</p>
             )}
             <VerdictCard verdict={verdict} loading={evaluating} />
-            {verdict && (
+            {verdict && isAvailable && (
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowPayment(true)}
@@ -371,13 +448,13 @@ export default function ListingClient({ id }: Props) {
 
       {showPayment && (
         <PaymentModal
-        listingId={listing.id}
-        onchainListingId={listing.onchain_listing_id}
-        price={Number(listing.price)}
-        ipfsCid={listing.ipfs_cid}
-        listingTitle={listing.title}
-        onClose={() => setShowPayment(false)}
-      />
+          listingId={listing.id}
+          onchainListingId={listing.onchain_listing_id}
+          price={Number(listing.price)}
+          ipfsCid={listing.ipfs_cid}
+          listingTitle={listing.title}
+          onClose={() => setShowPayment(false)}
+        />
       )}
     </div>
   );

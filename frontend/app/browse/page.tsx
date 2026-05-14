@@ -7,12 +7,20 @@ import ListingCard from '../../components/ListingCard';
 import { Listing } from '../../lib/genlayer';
 
 const CATEGORIES = ['All', 'DeFi', 'NFT', 'DAO', 'Oracle', 'Identity', 'Utility'];
+type SortKey = 'newest' | 'price_asc' | 'price_desc' | 'top_rated';
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: 'newest',     label: 'Newest' },
+  { key: 'price_asc',  label: 'Price ↑' },
+  { key: 'price_desc', label: 'Price ↓' },
+  { key: 'top_rated',  label: 'Top Rated' },
+];
 
 export default function BrowsePage() {
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('All');
+  const [sort, setSort] = useState<SortKey>('newest');
 
   useEffect(() => {
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
@@ -43,7 +51,7 @@ export default function BrowsePage() {
 
   const filtered = useMemo(() => {
     const safe = Array.isArray(listings) ? listings : [];
-    return safe.filter((l) => {
+    const matched = safe.filter((l) => {
       const matchesCategory = category === 'All' || l.category === category;
       const q = search.toLowerCase();
       const matchesSearch =
@@ -52,7 +60,19 @@ export default function BrowsePage() {
         l.description.toLowerCase().includes(q);
       return matchesCategory && matchesSearch;
     });
-  }, [listings, search, category]);
+
+    return [...matched].sort((a, b) => {
+      if (sort === 'price_asc')  return Number(a.price) - Number(b.price);
+      if (sort === 'price_desc') return Number(b.price) - Number(a.price);
+      if (sort === 'top_rated') {
+        const scoreA = Number(a.seller_upvotes ?? 0) / Math.max(1, Number(a.seller_upvotes ?? 0) + Number(a.seller_downvotes ?? 0));
+        const scoreB = Number(b.seller_upvotes ?? 0) / Math.max(1, Number(b.seller_upvotes ?? 0) + Number(b.seller_downvotes ?? 0));
+        return scoreB - scoreA;
+      }
+      // newest: higher id = newer (on-chain sequential ids)
+      return Number(b.id ?? 0) - Number(a.id ?? 0);
+    });
+  }, [listings, search, category, sort]);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -85,7 +105,7 @@ export default function BrowsePage() {
         </div>
 
         {/* Category tabs */}
-        <div className="flex flex-wrap gap-2 mb-8">
+        <div className="flex flex-wrap gap-2 mb-4">
           {CATEGORIES.map((cat) => {
             const count = categoryCounts[cat] ?? 0;
             return (
@@ -107,6 +127,24 @@ export default function BrowsePage() {
               </button>
             );
           })}
+        </div>
+
+        {/* Sort controls */}
+        <div className="flex items-center gap-2 mb-8">
+          <span className="text-xs text-neutral-400 dark:text-neutral-500 shrink-0">Sort:</span>
+          {SORTS.map((s) => (
+            <button
+              key={s.key}
+              onClick={() => setSort(s.key)}
+              className={`text-xs px-3 py-1 rounded-full border transition-colors ${
+                sort === s.key
+                  ? 'bg-neutral-900 text-[#F7F4EF] border-neutral-900 dark:bg-neutral-100 dark:text-neutral-900 dark:border-neutral-100'
+                  : 'bg-white dark:bg-neutral-900 text-neutral-500 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700 hover:border-neutral-400 dark:hover:border-neutral-500'
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
         </div>
 
         {/* Grid */}
