@@ -109,6 +109,28 @@ export default function ListingClient({ id }: Props) {
   const [copied, setCopied] = useState(false);
   const [demoSession, setDemoSession] = useState<DemoSession | null>(null);
 
+  // "You already own this" — check localStorage purchases for this listing
+  const [ownedPurchase, setOwnedPurchase] = useState<{
+    sourceCode?: string;
+    encryption_key_base64?: string;
+    ipfs_cid?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('purchases');
+      if (!raw) return;
+      const purchases: any[] = JSON.parse(raw);
+      // Match by onchain_listing_id or listing_id against the URL id param
+      const match = purchases.find(
+        (p) =>
+          String(p.onchain_listing_id ?? '') === String(id) ||
+          String(p.listing_id ?? '') === String(id)
+      );
+      if (match) setOwnedPurchase(match);
+    } catch {}
+  }, [id]);
+
   const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL ?? '';
 
   const fetchListing = useCallback(() => {
@@ -352,6 +374,39 @@ export default function ListingClient({ id }: Props) {
           </div>
         )}
 
+        {/* ── "You already own this" banner ── */}
+        {ownedPurchase && (
+          <div className="mb-5 flex flex-col gap-3 bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 rounded-2xl px-4 py-4">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">✅</span>
+              <div>
+                <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">You already own this contract</p>
+                <p className="text-xs text-emerald-600 dark:text-emerald-500 mt-0.5">Your purchase was confirmed on-chain. Access your source below.</p>
+              </div>
+            </div>
+            {ownedPurchase.sourceCode ? (
+              <button
+                onClick={() => {
+                  const blob = new Blob([ownedPurchase.sourceCode!], { type: 'text/x-python' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `${listing?.title?.replace(/\s+/g, '_') ?? 'contract'}.py`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                className="w-full text-sm font-semibold py-3 rounded-xl bg-emerald-700 text-white hover:bg-emerald-800 transition-colors"
+              >
+                ⬇ Download Source Code
+              </button>
+            ) : (
+              <p className="text-xs text-emerald-600 dark:text-emerald-500">
+                Source code not found in this browser. Check your Dashboard → Buying tab to re-download.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Primary actions */}
         <div className="flex flex-col gap-3 mb-6">
           {hasDemoContract ? (
@@ -380,18 +435,20 @@ export default function ListingClient({ id }: Props) {
               {showJudge ? 'Hide AI Judge ↑' : 'Review with AI Judge ✦'}
             </button>
 
-            {/* Feature 1: Disable buy when not active */}
-            {isAvailable ? (
-              <button
-                onClick={() => setShowPayment(true)}
-                className="flex-1 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-neutral-100 font-semibold py-3 rounded-2xl hover:border-neutral-900 dark:hover:border-neutral-400 transition-colors text-sm"
-              >
-                Buy Source · {formatGEN(listing.price)}
-              </button>
-            ) : (
-              <div className="flex-1 text-center text-sm text-neutral-400 dark:text-neutral-500 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 py-3 rounded-2xl cursor-not-allowed">
-                {listing.status === 'sold' ? 'Already sold' : 'Unavailable'}
-              </div>
+            {/* Hide buy button if already owned */}
+            {!ownedPurchase && (
+              isAvailable ? (
+                <button
+                  onClick={() => setShowPayment(true)}
+                  className="flex-1 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-neutral-100 font-semibold py-3 rounded-2xl hover:border-neutral-900 dark:hover:border-neutral-400 transition-colors text-sm"
+                >
+                  Buy Source · {formatGEN(listing.price)}
+                </button>
+              ) : (
+                <div className="flex-1 text-center text-sm text-neutral-400 dark:text-neutral-500 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 py-3 rounded-2xl cursor-not-allowed">
+                  {listing.status === 'sold' ? 'Already sold' : 'Unavailable'}
+                </div>
+              )
             )}
           </div>
         </div>

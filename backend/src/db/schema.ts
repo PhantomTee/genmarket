@@ -227,3 +227,28 @@ export async function getRecentPurchases(limit = 15): Promise<DbPurchase[]> {
   );
   return result.rows as DbPurchase[];
 }
+
+export async function getPurchasesByBuyer(buyerAddress: string): Promise<DbPurchase[]> {
+  const result = await pool.query(
+    `SELECT * FROM public.purchases WHERE lower(buyer_address) = lower($1) ORDER BY created_at DESC`,
+    [buyerAddress]
+  );
+  return result.rows as DbPurchase[];
+}
+
+export interface MarketplaceStats {
+  listings: number;
+  purchases: number;
+}
+
+/** Aggregate marketplace stats for the homepage hero. Queries are cheap COUNT/SUM. */
+export async function getMarketplaceStats(): Promise<MarketplaceStats> {
+  const [listingsRes, purchasesRes] = await Promise.all([
+    pool.query(`SELECT COUNT(*) AS cnt FROM public.listings WHERE onchain_listing_id IS NOT NULL`),
+    pool.query(`SELECT COUNT(*) AS cnt FROM public.purchases WHERE status = 'released'`),
+  ]);
+  return {
+    listings: parseInt(listingsRes.rows[0]?.cnt ?? '0', 10),
+    purchases: parseInt(purchasesRes.rows[0]?.cnt ?? '0', 10),
+  };
+}

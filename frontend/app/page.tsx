@@ -19,8 +19,20 @@ async function getFeaturedListings(): Promise<Listing[]> {
   }
 }
 
+async function getStats(): Promise<{ listings: number; purchases: number } | null> {
+  try {
+    const backend = process.env.NEXT_PUBLIC_BACKEND_URL;
+    if (!backend) return null;
+    const res = await fetch(`${backend}/api/stats`, { next: { revalidate: 60 } });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
 export default async function HomePage() {
-  const listings = await getFeaturedListings();
+  const [listings, stats] = await Promise.all([getFeaturedListings(), getStats()]);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -59,6 +71,25 @@ export default async function HomePage() {
             Write Contract
           </Link>
         </div>
+
+        {/* Live stats */}
+        {stats && (stats.listings > 0 || stats.purchases > 0) && (
+          <div className="mt-10 flex items-center gap-6 text-sm text-neutral-400 dark:text-neutral-500">
+            {stats.listings > 0 && (
+              <span>
+                <span className="font-semibold text-neutral-700 dark:text-neutral-300 tabular-nums">{stats.listings}</span>
+                {' '}{stats.listings === 1 ? 'contract' : 'contracts'}
+              </span>
+            )}
+            {stats.listings > 0 && stats.purchases > 0 && <span className="text-neutral-200 dark:text-neutral-700">·</span>}
+            {stats.purchases > 0 && (
+              <span>
+                <span className="font-semibold text-neutral-700 dark:text-neutral-300 tabular-nums">{stats.purchases}</span>
+                {' '}{stats.purchases === 1 ? 'purchase' : 'purchases'}
+              </span>
+            )}
+          </div>
+        )}
       </section>
 
       {/* Featured listings */}
