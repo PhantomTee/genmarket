@@ -144,8 +144,23 @@ async function writeAndWait(
     retries: 40,
   });
 
-  if ((receipt as any).txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) {
-    throw new Error(`Transaction failed: ${params.functionName}`);
+  const r = receipt as any;
+
+  // GenLayer: consensus can be ACCEPTED while execution still ERRORS.
+  // Check every field that might carry the execution failure.
+  const hasError =
+    r.txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR ||
+    r.txExecutionResultName === 'ERROR' ||
+    r.execution_result === 'ERROR' ||
+    r.execution_result === ExecutionResult.FINISHED_WITH_ERROR ||
+    r.txExecutionResult === 'ERROR' ||
+    r.txExecutionResult === ExecutionResult.FINISHED_WITH_ERROR ||
+    r?.consensus_data?.leader_receipt?.execution_result === 'ERROR';
+
+  if (hasError) {
+    const stderr = r?.consensus_data?.leader_receipt?.stderr ?? '';
+    const detail = stderr ? `: ${stderr.slice(0, 200)}` : '';
+    throw new Error(`Transaction failed: ${params.functionName}${detail}`);
   }
 
   return receipt as any;
