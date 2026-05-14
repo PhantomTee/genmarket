@@ -228,14 +228,6 @@ export async function getRecentPurchases(limit = 15): Promise<DbPurchase[]> {
   return result.rows as DbPurchase[];
 }
 
-export async function getPurchasesByBuyer(buyerAddress: string): Promise<DbPurchase[]> {
-  const result = await pool.query(
-    `SELECT * FROM public.purchases WHERE lower(buyer_address) = lower($1) ORDER BY created_at DESC`,
-    [buyerAddress]
-  );
-  return result.rows as DbPurchase[];
-}
-
 export interface MarketplaceStats {
   listings: number;
   purchases: number;
