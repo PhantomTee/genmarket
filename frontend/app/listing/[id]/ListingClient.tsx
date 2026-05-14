@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import Link from 'next/link';
 import Navbar from '../../../components/Navbar';
 import VerdictCard, { Verdict } from '../../../components/VerdictCard';
@@ -98,6 +98,8 @@ export default function ListingClient({ id }: Props) {
   const [showJudge, setShowJudge] = useState(false);
   const [requirement, setRequirement] = useState('');
   const [evaluating, setEvaluating] = useState(false);
+  const [judgeElapsed, setJudgeElapsed] = useState(0);   // seconds since evaluate started
+  const judgeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [verdict, setVerdict] = useState<Verdict | null>(null);
   const [judgeError, setJudgeError] = useState<string | null>(null);
 
@@ -148,14 +150,21 @@ export default function ListingClient({ id }: Props) {
       return;
     }
     setEvaluating(true);
+    setJudgeElapsed(0);
     setVerdict(null);
     setJudgeError(null);
+
+    // Start elapsed timer so the buyer can see progress
+    if (judgeTimerRef.current) clearInterval(judgeTimerRef.current);
+    judgeTimerRef.current = setInterval(() => setJudgeElapsed((s) => s + 1), 1_000);
+
     try {
       const result = await evaluateWithJudge(writeClient, listing.preview_code, listing.description, requirement);
       setVerdict(normalizeVerdict(result));
     } catch (e: any) {
       setJudgeError(e.message);
     } finally {
+      if (judgeTimerRef.current) { clearInterval(judgeTimerRef.current); judgeTimerRef.current = null; }
       setEvaluating(false);
     }
   }
@@ -409,8 +418,23 @@ export default function ListingClient({ id }: Props) {
               disabled={evaluating || !requirement.trim() || connecting}
               className="bg-neutral-900 text-[#F7F4EF] dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200 font-semibold py-3 rounded-xl hover:bg-neutral-700 transition-colors disabled:opacity-50 text-sm"
             >
-              {connecting ? 'Connecting wallet…' : evaluating ? 'Waiting for GenLayer…' : writeClient ? 'Evaluate with AI' : 'Connect wallet to evaluate'}
+              {connecting ? 'Connecting wallet…'
+                : evaluating ? `Evaluating… (${judgeElapsed}s)`
+                : writeClient ? 'Evaluate with AI'
+                : 'Connect wallet to evaluate'}
             </button>
+
+            {/* Live progress indicator while waiting for GenLayer consensus */}
+            {evaluating && (
+              <div className="flex items-center gap-3 text-xs text-purple-600 bg-purple-50 border border-purple-200 rounded-xl px-4 py-3">
+                <div className="w-3.5 h-3.5 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin shrink-0" />
+                <div>
+                  <p className="font-medium">GenLayer Judge is evaluating…</p>
+                  <p className="text-purple-500 tabular-nums">{judgeElapsed}s elapsed · typically 2–5 min</p>
+                </div>
+              </div>
+            )}
+
             {judgeError && (
               <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-3">{judgeError}</p>
             )}

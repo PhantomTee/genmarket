@@ -690,7 +690,7 @@ export async function evaluateWithJudge(
     hash: txHash,
     status: TransactionStatus.FINALIZED,
     interval: 3_000,
-    retries: 60,
+    retries: 100,          // 5 min total — Judge calls an LLM, can be slow on Studionet
     fullTransaction: true,
   } as any);
 
