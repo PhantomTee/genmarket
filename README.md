@@ -1,21 +1,131 @@
 # GenMarket
 
-Decentralized code marketplace built on [GenLayer](https://genlayer.com) — buy and sell verified intelligent contracts with on-chain escrow and AI-powered code evaluation.
+**Decentralized code marketplace on [GenLayer](https://genlayer.com)** — sell and buy AI-verified intelligent contracts with trustless on-chain escrow in native GEN token.
+
+Live: **[genmarketplace.vercel.app](https://genmarketplace.vercel.app)**
+
+---
+
+## What is GenMarket?
+
+GenMarket is a peer-to-peer marketplace where developers can sell their GenLayer intelligent contract source code. Every listing is:
+
+- **Encrypted** — source code is encrypted client-side before upload; the backend never sees plaintext
+- **Stored on IPFS** — via Pinata, permanent and decentralized
+- **AI-evaluated** — the JudgeContract runs multi-validator LLM consensus to score code quality before listing goes live
+- **Trustlessly paid** — native GEN token is locked in a smart contract escrow; seller receives funds only when the buyer confirms delivery
+
+---
 
 ## Architecture
 
 ```
-/genmarket
-  /contracts        GenLayer intelligent contracts (do not modify)
-  /backend          Node.js + Express + TypeScript API
-  /frontend         Next.js 14 App Router + Tailwind CSS
+genmarket/
+├── contracts/
+│   ├── Marketplace.py       GenLayer intelligent contract — listings, escrow, reputation
+│   └── JudgeContract.py     Intelligent contract — LLM multi-validator code evaluation
+├── backend/                 Node.js + Express + TypeScript
+│   ├── src/routes/          REST API (listings, payments, judge, IPFS)
+│   ├── src/services/        GenLayer RPC, encryption, IPFS helpers
+│   └── src/db/schema.ts     PostgreSQL schema (Supabase) — listings + purchases
+└── frontend/                Next.js 15 App Router
+    ├── app/                 Pages (browse, sell, listing, dashboard, editor)
+    ├── components/          PaymentModal, ListingClient, Toast, etc.
+    └── lib/                 genlayer.ts, wallet-context, lint, normalize
 ```
 
-Two contracts on GenLayer Studionet (chain 61999):
-- **Marketplace.py** — deterministic, handles listings and escrow in native GEN token
-- **JudgeContract.py** — intelligent contract, evaluates code quality via LLM multi-validator consensus
+**Chain:** GenLayer Studionet — Chain ID `61999`
 
-## Setup
+---
+
+## Contracts
+
+### `Marketplace.py` (Deterministic)
+
+Handles all listings and escrow logic on-chain.
+
+| Method | Description |
+|---|---|
+| `create_listing(title, desc, price, category, preview, source_hash)` | Publish a listing on-chain |
+| `buy(listing_id)` **payable** | Lock GEN in escrow; escrow ID = listing ID |
+| `confirm_purchase(escrow_id)` | Release GEN to seller; marks listing sold |
+| `refund(escrow_id)` | Return GEN to buyer; re-activates listing |
+| `vote_seller(escrow_id, upvote)` | Submit seller reputation vote after purchase |
+| `remove_listing(listing_id)` | Seller or owner removes a listing |
+| `get_all_listings_json()` | All active listings as JSON |
+| `get_listing_json(listing_id)` | Single listing |
+| `get_escrow_json(escrow_id)` | Escrow state (buyer, amount, status) |
+| `get_seller_reputation_json(seller_hex)` | Seller score |
+
+**Escrow design:** `escrow_id === listing_id`. One active escrow per listing; can be reused after refund.
+
+### `JudgeContract.py` (Intelligent)
+
+Uses GenLayer's LLM multi-validator consensus to evaluate contract code quality before listing goes live. Returns a structured JSON verdict with a score and reasoning.
+
+---
+
+## Payment Flow
+
+```
+Seller                          Buyer                          Backend
+  │                               │                               │
+  ├─ Encrypt source (NaCl)        │                               │
+  ├─ Upload to IPFS               │                               │
+  ├─ POST /api/listings (store)   │                               │
+  ├─ Judge evaluation (LLM)       │                               │
+  ├─ create_listing() on-chain ───┤                               │
+  │                               │                               │
+  │                    buy(id) on-chain (GEN locked)              │
+  │                    confirm_purchase(id) on-chain              │
+  │                    ├─ emit_transfer → seller receives GEN      │
+  │                    ├─ escrow status: released                  │
+  │                    └─ POST /api/payments/confirm ────────────►│
+  │                               │            verify escrow      │
+  │                               │◄── source code ───────────────┤
+  │                               │                               │
+  │                    vote_seller() (optional)                   │
+```
+
+**Security guarantee:** Backend decrypts and delivers source code **only** when `escrow.status === "released"` on-chain — meaning the seller has already received payment.
+
+---
+
+## Security Properties
+
+| Property | Implementation |
+|---|---|
+| Source never exposed pre-sale | NaCl secretbox encryption before upload; IPFS stores ciphertext only |
+| Per-listing key isolation | Each listing has a unique encryption key, wrapped with `ENCRYPTION_MASTER_KEY` |
+| Seller paid before source delivered | Backend checks `escrow.status === "released"` — not just "locked" |
+| Buyer identity verified | `escrow.buyer` address matched against request before decryption |
+| No server-side plaintext | Source decrypted on backend for delivery but never written to disk or DB |
+| Reputation can't be gamed | Vote requires `escrow.status === "released"` — buyer must have actually paid and confirmed |
+
+---
+
+## Pages
+
+| Route | Description |
+|---|---|
+| `/` | Homepage — featured listings, stats |
+| `/browse` | All active listings with search + category filter |
+| `/listing/[id]` | Listing detail — AI evaluation, live preview, buy flow |
+| `/sell` | Multi-step seller flow: write → lint → encrypt → IPFS → on-chain |
+| `/dashboard` | Seller earnings, buyer purchase history with re-download |
+| `/editor` | Standalone Monaco-powered GenLayer contract IDE with live lint |
+
+---
+
+## Local Development
+
+### Prerequisites
+
+- Node.js 20+
+- A GenLayer Studionet RPC endpoint (local Studio or hosted)
+- Pinata account (IPFS)
+- Supabase project (PostgreSQL)
+- MetaMask with GenLayer Studionet configured
 
 ### 1. Environment variables
 
@@ -24,24 +134,22 @@ cp .env.example backend/.env
 cp .env.example frontend/.env.local
 ```
 
-Fill in all values. Key ones:
-
-| Variable | Description |
-|---|---|
-| `GENLAYER_RPC_URL` | GenLayer Studionet RPC (default: `http://localhost:4000/api`) |
-| `MARKETPLACE_CONTRACT_ADDRESS` | Deployed Marketplace.py address |
-| `JUDGE_CONTRACT_ADDRESS` | Deployed JudgeContract.py address |
-| `BACKEND_PRIVATE_KEY` | Service wallet private key (signs judge evaluation txs) |
-| `ENCRYPTION_MASTER_KEY` | 32-byte base64 key — wraps per-listing keys in DB |
-| `PINATA_API_KEY` / `PINATA_SECRET_API_KEY` | Pinata IPFS credentials |
+| Variable | Where | Description |
+|---|---|---|
+| `GENLAYER_RPC_URL` | backend | GenLayer Studionet RPC |
+| `MARKETPLACE_CONTRACT_ADDRESS` | backend | Deployed Marketplace.py address |
+| `JUDGE_CONTRACT_ADDRESS` | backend | Deployed JudgeContract.py address |
+| `MASTER_KEY` | backend | 32-byte base64 master encryption key |
+| `DATABASE_URL` | backend | Supabase connection string (port 6543 for pooler) |
+| `PINATA_API_KEY` / `PINATA_SECRET_API_KEY` | backend | Pinata IPFS credentials |
+| `NEXT_PUBLIC_BACKEND_URL` | frontend | Backend API base URL |
+| `NEXT_PUBLIC_MARKETPLACE_CONTRACT_ADDRESS` | frontend | Same Marketplace address (public) |
+| `NEXT_PUBLIC_GENLAYER_RPC_URL` | frontend | GenLayer RPC for frontend reads |
 
 Generate keys:
 ```bash
-# ENCRYPTION_MASTER_KEY
+# MASTER_KEY
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-
-# BACKEND_PRIVATE_KEY
-node -e "console.log('0x' + require('crypto').randomBytes(32).toString('hex'))"
 ```
 
 ### 2. Backend
@@ -60,34 +168,77 @@ npm install
 npm run dev          # Next.js, port 3000
 ```
 
-## Pages
+---
 
-| Route | Description |
+## Deployment
+
+| Service | Platform |
 |---|---|
-| `/` | Homepage with featured listings |
-| `/browse` | All listings with search and category filter |
-| `/listing/[id]` | Live contract playground + AI evaluation + purchase flow |
-| `/sell` | Multi-step seller flow (encrypt → IPFS → on-chain listing) |
-| `/dashboard` | Seller earnings + buyer purchase history |
-| `/editor` | Standalone GenLayer contract editor with live lint |
+| Frontend | Vercel |
+| Backend | Railway |
+| Database | Supabase (PostgreSQL) |
+| File storage | Pinata (IPFS) |
+| Smart contracts | GenLayer Studionet |
 
-## Payment flow
+### Database setup (Supabase)
 
-1. Buyer calls `Marketplace.buy(listing_id)` with GEN token as `msg.value` — payment locked in contract
-2. Buyer calls `POST /api/payments/confirm` — backend verifies escrow on-chain, returns decryption key
-3. Buyer fetches encrypted source from IPFS and decrypts in browser
-4. Buyer calls `Marketplace.confirm_purchase(escrow_id)` — releases GEN to seller
+Run in the Supabase SQL editor:
 
-## Security properties
+```sql
+create extension if not exists "pgcrypto";
 
-- Source code encrypted with NaCl secretbox (client-side) before upload — backend never sees plaintext
-- Per-listing encryption keys stored in SQLite wrapped with `ENCRYPTION_MASTER_KEY`
-- Plaintext source only exists in memory during `/api/judge` request lifetime
-- Decryption key only released after on-chain escrow is verified as `locked`
-- Buyer address verified against on-chain escrow before key release
+create table if not exists public.listings (
+  listing_id text primary key,
+  ipfs_cid text not null,
+  seller_pubkey text not null default '',
+  encryption_key text not null,
+  created_at bigint not null,
+  chain_listing_id text,
+  onchain_listing_id text,
+  create_tx_hash text,
+  preview_code text,
+  source_hash text,
+  lint_status text,
+  lint_stdout text,
+  lint_stderr text,
+  linted_at bigint
+);
 
-## GenLayer Studionet
+create table if not exists public.purchases (
+  purchase_id uuid primary key default gen_random_uuid(),
+  listing_id text not null references public.listings(listing_id) on delete cascade,
+  onchain_listing_id text,
+  escrow_id text not null,
+  buyer_address text not null,
+  seller_address text,
+  price text,
+  ipfs_cid text,
+  source_hash text,
+  status text not null default 'locked',
+  created_at bigint not null,
+  confirmed_at bigint,
+  refunded_at bigint,
+  unique (escrow_id)
+);
+```
 
-Chain ID: `61999`  
-Network name: `studionet`  
-RPC: `http://localhost:4000/api` (local Studio) or hosted Studionet endpoint
+### Adding GenLayer Studionet to MetaMask
+
+| Field | Value |
+|---|---|
+| Network name | GenLayer Studionet |
+| RPC URL | *(your Studionet endpoint)* |
+| Chain ID | `61999` |
+| Currency symbol | `GEN` |
+
+---
+
+## Tech Stack
+
+- **Frontend:** Next.js 15, TypeScript, Tailwind CSS, Monaco Editor, `@monaco-editor/react`
+- **Backend:** Node.js, Express, TypeScript, `node-postgres`
+- **Contracts:** Python on GenLayer Studionet (`genlayer` SDK)
+- **Wallet:** MetaMask + `genlayer-js` SDK
+- **Storage:** Pinata IPFS
+- **Database:** Supabase (PostgreSQL)
+- **Encryption:** NaCl secretbox (tweetnacl) + AES-256-GCM master key wrapping
