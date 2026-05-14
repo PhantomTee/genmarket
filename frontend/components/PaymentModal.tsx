@@ -116,30 +116,54 @@ export default function PaymentModal({
         throw new Error('No verified escrow found. Pay into escrow first.');
       }
 
-      // Verify the escrow directly — new contract uses listing_id as escrow_id
-      const escrow = await getEscrow(savedEscrowId);
+      // ── Pre-flight: verify escrow on-chain ──────────────────────────────
+      const escrowBefore = await getEscrow(savedEscrowId);
 
-      if (!escrow) {
+      if (!escrowBefore) {
         localStorage.removeItem(escrowStorageKey());
         setEscrowId('');
         setStep('escrow');
         throw new Error('Escrow not found on-chain. Please pay into escrow again.');
       }
 
-      if (String(escrow.buyer).toLowerCase() !== String(address).toLowerCase()) {
+      if (String(escrowBefore.buyer).toLowerCase() !== String(address).toLowerCase()) {
         throw new Error('This escrow belongs to a different buyer wallet.');
       }
 
-      if (escrow.status !== 'locked') {
-        throw new Error(`Escrow is not locked. Current status: ${escrow.status}`);
+      // If already released (e.g. user refreshed after confirming), skip on-chain tx
+      // and go straight to fetching the source from the backend.
+      if (escrowBefore.status !== 'locked' && escrowBefore.status !== 'released') {
+        throw new Error(`Cannot confirm: escrow status is '${escrowBefore.status}'.`);
       }
 
-      // ── Step 1: Confirm on-chain first ──────────────────────────────────
-      // The escrow transitions locked → released on-chain. The backend will
-      // refuse to decrypt until it sees 'locked' or 'released' on-chain.
-      await confirmPurchase(writeClient, savedEscrowId);
+      // ── Step 1: Confirm on-chain (locked → released) ─────────────────────
+      if (escrowBefore.status === 'locked') {
+        await confirmPurchase(writeClient, savedEscrowId);
 
-      // ── Step 2: Backend delivers source only after on-chain proof ────────
+        // Poll until the on-chain state reflects 'released'.
+        // Backend strictly requires 'released' before decrypting.
+        const MAX_POLLS = 12;
+        const POLL_MS = 5_000;
+        let released = false;
+
+        for (let i = 0; i < MAX_POLLS; i++) {
+          await new Promise((r) => setTimeout(r, POLL_MS));
+          const updated = await getEscrow(savedEscrowId);
+          if (updated?.status === 'released') {
+            released = true;
+            break;
+          }
+        }
+
+        if (!released) {
+          throw new Error(
+            'confirm_purchase was submitted but the on-chain state has not updated yet. ' +
+            'Wait a few seconds and refresh — you will not be charged again.'
+          );
+        }
+      }
+
+      // ── Step 2: Backend delivers source only after on-chain proof ─────────
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
       if (!backendUrl) {
@@ -181,8 +205,6 @@ export default function PaymentModal({
             ipfs_cid: ipfsCid,
             escrow_id: savedEscrowId,
             source_hash: sourceHash,
-            // Store the decrypted source so the dashboard can re-download it
-            // without needing to call the backend again.
             sourceCode,
           },
         ];
@@ -198,6 +220,7 @@ export default function PaymentModal({
       setError(e.message || 'Failed to confirm purchase');
     } finally {
       setBusy(false);
+
     }
   }
 
