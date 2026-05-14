@@ -495,6 +495,27 @@ export default function GenLayerEditor() {
           <span style={{ color: '#3e3e42' }}>|</span>
           <span className="text-xs" style={{ color: '#cccccc' }}>{filename}</span>
           {hasDraft && <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: '#3e3e42', color: '#858585' }}>Draft</span>}
+          {/* Navigation links — desktop only */}
+          <span className="hidden sm:inline" style={{ color: '#3e3e42' }}>|</span>
+          <div className="hidden sm:flex items-center gap-3">
+            {[
+              { href: '/browse',    label: 'Browse' },
+              { href: '/sell',      label: 'Sell' },
+              { href: '/dashboard', label: 'Dashboard' },
+              { href: '/purchases', label: 'Recent' },
+            ].map(({ href, label }) => (
+              <Link
+                key={href}
+                href={href}
+                className="text-xs transition-colors"
+                style={{ color: '#858585' }}
+                onMouseEnter={(e) => ((e.target as HTMLElement).style.color = '#cccccc')}
+                onMouseLeave={(e) => ((e.target as HTMLElement).style.color = '#858585')}
+              >
+                {label}
+              </Link>
+            ))}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -529,6 +550,12 @@ export default function GenLayerEditor() {
             Use in listing →
           </button>
         </div>
+      </div>
+
+      {/* ── Mobile warning — editor requires a desktop browser ── */}
+      <div className="sm:hidden shrink-0 flex items-center justify-between gap-3 px-4 py-3 text-xs" style={{ background: '#2d2d00', borderBottom: '1px solid #3e3e00', color: '#cca700' }}>
+        <span>⚠ The editor is not optimized for mobile. For the best experience, use a desktop browser.</span>
+        <Link href="/browse" className="shrink-0 underline underline-offset-2" style={{ color: '#cca700' }}>Browse instead</Link>
       </div>
 
       {/* ── Body ── */}
