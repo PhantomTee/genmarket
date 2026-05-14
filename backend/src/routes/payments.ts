@@ -71,9 +71,9 @@ router.post('/confirm', async (req: Request, res: Response) => {
       });
     }
 
-    if (escrow.status !== 'locked' && escrow.status !== 'released') {
+    if (escrow.status !== 'released') {
       return res.status(400).json({
-        error: `Payment not confirmed on-chain (escrow status: ${escrow.status}). Call confirm_purchase on-chain first.`,
+        error: `Source not available yet. Escrow status is '${escrow.status}'. Call confirm_purchase on-chain first to release payment to the seller.`,
       });
     }
 

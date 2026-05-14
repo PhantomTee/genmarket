@@ -4,6 +4,14 @@ import json
 from genlayer import *
 
 
+@gl.evm.contract_interface
+class _Recipient:
+    class View:
+        pass
+    class Write:
+        pass
+
+
 class Marketplace(gl.Contract):
 
     owner: Address
@@ -207,7 +215,7 @@ class Marketplace(gl.Contract):
         seller = self.listing_sellers[listing_id]
         amount = self.escrow_amounts[escrow_id]
 
-        gl.transfer(seller, amount)
+        _Recipient(seller).emit_transfer(value=amount)
 
         self.escrow_statuses[escrow_id] = "released"
         self.listing_statuses[listing_id] = "sold"
@@ -225,7 +233,7 @@ class Marketplace(gl.Contract):
         listing_id = self.escrow_listing_ids[escrow_id]
         amount = self.escrow_amounts[escrow_id]
 
-        gl.transfer(buyer, amount)
+        _Recipient(buyer).emit_transfer(value=amount)
 
         self.escrow_statuses[escrow_id] = "refunded"
         self.escrow_voted[escrow_id] = False
