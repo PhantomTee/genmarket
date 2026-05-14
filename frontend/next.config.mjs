@@ -9,15 +9,16 @@ const nextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              // blob: and cdn.jsdelivr.net required for Monaco Editor
+              // Scripts: blob: for workers, CDN for Monaco AMD loader
               "script-src 'self' 'unsafe-eval' 'unsafe-inline' blob: https://cdn.jsdelivr.net",
-              // script-src-elem must also allow the CDN (Chrome uses this for <script src=...>)
               "script-src-elem 'self' 'unsafe-inline' blob: https://cdn.jsdelivr.net",
-              "style-src 'self' 'unsafe-inline'",
+              // Styles: CDN for Monaco editor.main.css
+              "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+              "style-src-elem 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
               "connect-src 'self' https: wss:",
               "img-src 'self' data: https:",
               "font-src 'self' data: https://cdn.jsdelivr.net",
-              // Monaco Editor spawns language-service workers from blob: URLs
+              // Monaco Web Workers use blob: URLs
               "worker-src blob:",
               "child-src blob:",
               "frame-ancestors 'none'",
