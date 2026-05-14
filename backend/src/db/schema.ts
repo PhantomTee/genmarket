@@ -206,3 +206,14 @@ export async function getPurchasesByBuyer(buyerAddress: string): Promise<DbPurch
   );
   return result.rows as DbPurchase[];
 }
+
+export async function getRecentPurchases(limit = 15): Promise<DbPurchase[]> {
+  const result = await pool.query(
+    `SELECT * FROM public.purchases
+     WHERE status = 'released'
+     ORDER BY confirmed_at DESC NULLS LAST
+     LIMIT $1`,
+    [limit]
+  );
+  return result.rows as DbPurchase[];
+}

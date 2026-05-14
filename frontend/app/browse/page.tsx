@@ -64,6 +64,7 @@ export default function BrowsePage() {
         <div className="flex items-center gap-4 sm:gap-6">
           <div className="hidden sm:flex items-center gap-6">
             <Link href="/sell" className="text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors">Sell</Link>
+            <Link href="/purchases" className="text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors">Recent</Link>
             <Link href="/dashboard" className="text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors">Dashboard</Link>
           </div>
           <WalletConnect />

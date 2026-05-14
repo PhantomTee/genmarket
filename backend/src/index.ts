@@ -5,6 +5,7 @@ import { initDb } from './db/schema.js';
 import listingsRouter from './routes/listings.js';
 import paymentsRouter from './routes/payments.js';
 import contractsRouter from './routes/contracts.js';
+import purchasesRouter from './routes/purchases.js';
 import { lintContract } from './services/lint.js';
 
 // Keep the process alive on unhandled rejections — log and continue
@@ -45,6 +46,7 @@ app.get('/health', (_req, res) => {
 app.use('/api/listings', listingsRouter);
 app.use('/api/payments', paymentsRouter);
 app.use('/api/contracts', contractsRouter);
+app.use('/api/purchases', purchasesRouter);
 
 // POST /api/lint — inline, no separate router needed
 app.post('/api/lint', (req, res) => {

@@ -33,6 +33,7 @@ export default async function HomePage() {
           <div className="hidden sm:flex items-center gap-6">
             <Link href="/browse" className="text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors">Browse</Link>
             <Link href="/sell" className="text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors">Sell</Link>
+            <Link href="/purchases" className="text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors">Recent</Link>
             <Link href="/editor" className="text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors">Editor</Link>
           </div>
           <WalletConnect />
