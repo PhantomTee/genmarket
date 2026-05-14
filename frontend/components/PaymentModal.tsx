@@ -83,11 +83,11 @@ export default function PaymentModal({
 
       const returnedEscrowId = await buy(writeClient, chainId, BigInt(price), address);
 
-      // New contract: escrow_id === listing_id (e.g. "5").
-      // Use the receipt return value if available, otherwise fall back to chainId.
-      const finalEscrowId = (returnedEscrowId && returnedEscrowId.trim())
-        ? returnedEscrowId.trim()
-        : chainId;
+      // New contract: escrow_id === on-chain listing_id === chainId.
+      // Do NOT use returnedEscrowId — extractReturnValue reads receipt metadata
+      // (e.g. tx nonce) that can be mistaken for the return value.
+      // chainId is authoritative: we sent it to buy(), contract echoes it back.
+      const finalEscrowId = chainId;
 
       setEscrowId(finalEscrowId);
       localStorage.setItem(escrowStorageKey(), finalEscrowId);
