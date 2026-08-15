@@ -4,6 +4,7 @@ import { getEscrow } from '../services/genlayer.js';
 import { getListingById, upsertPurchase, confirmPurchaseInDb, refundPurchaseInDb } from '../db/schema.js';
 import { decryptKeyWithMaster, decryptFromStorage } from '../services/encryption.js';
 import { fetchFromIPFS } from '../services/ipfs.js';
+import { verifySignature, buildMessage } from '../services/auth.js';
 
 const router = Router();
 
@@ -44,14 +45,26 @@ router.post('/buy', async (req: Request, res: Response) => {
 
 // POST /api/payments/confirm
 // Verifies escrow state on-chain, decrypts full source on the backend, and delivers it.
+// Requires a wallet-signed nonce (obtain via GET /api/auth/nonce?address=&action=confirm-purchase).
 router.post('/confirm', async (req: Request, res: Response) => {
   try {
-    const { listing_id, buyer_address, escrow_id, onchain_listing_id } = req.body;
+    const { listing_id, buyer_address, escrow_id, onchain_listing_id, signature, auth_message } = req.body;
 
     if (!listing_id || !buyer_address || !escrow_id) {
       return res.status(400).json({
         error: 'listing_id, buyer_address, and escrow_id are required',
       });
+    }
+
+    // ── Wallet-signature authentication ────────────────────────────────────
+    if (!signature || !auth_message) {
+      return res.status(401).json({
+        error: 'Wallet signature required. Obtain a nonce via GET /api/auth/nonce and sign it.',
+      });
+    }
+    const sigValid = await verifySignature(buyer_address, signature, auth_message);
+    if (!sigValid) {
+      return res.status(401).json({ error: 'Invalid or expired wallet signature' });
     }
 
     // ── On-chain escrow verification (mandatory) ────────────────────────────

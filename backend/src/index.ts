@@ -7,6 +7,7 @@ import paymentsRouter from './routes/payments.js';
 import contractsRouter from './routes/contracts.js';
 import purchasesRouter from './routes/purchases.js';
 import statsRouter from './routes/stats.js';
+import authRouter from './routes/auth.js';
 import { lintContract } from './services/lint.js';
 
 // Keep the process alive on unhandled rejections — log and continue
@@ -44,6 +45,7 @@ app.get('/health', (_req, res) => {
   res.json({ success: true, service: 'genmarket-backend', status: 'ok' });
 });
 
+app.use('/api/auth', authRouter);
 app.use('/api/listings', listingsRouter);
 app.use('/api/payments', paymentsRouter);
 app.use('/api/contracts', contractsRouter);

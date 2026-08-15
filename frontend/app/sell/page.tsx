@@ -292,14 +292,36 @@ export default function SellPage() {
       })();
 
       if (verifiedChainId) {
-        await fetch(
-          `${process.env.NEXT_PUBLIC_BACKEND_URL ?? ''}/api/listings/${listingId}/chain-id`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ onchain_listing_id: verifiedChainId }),
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? '';
+        let chainIdBody: Record<string, string> = { onchain_listing_id: verifiedChainId };
+
+        // Attach wallet signature so the backend can authenticate the seller
+        if (address) {
+          try {
+            const nonceRes = await fetch(
+              `${backendUrl}/api/auth/nonce?address=${encodeURIComponent(address)}&action=link-listing`
+            );
+            if (nonceRes.ok) {
+              const { message: authMessage } = await nonceRes.json();
+              const eth = (window as any).ethereum;
+              if (eth) {
+                const signature: string = await eth.request({
+                  method: 'personal_sign',
+                  params: [authMessage, address],
+                });
+                chainIdBody = { ...chainIdBody, seller_address: address, signature, auth_message: authMessage };
+              }
+            }
+          } catch {
+            // Non-fatal — proceed without signature (listing still links)
           }
-        );
+        }
+
+        await fetch(`${backendUrl}/api/listings/${listingId}/chain-id`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(chainIdBody),
+        });
         setChainListingId(verifiedChainId);
       }
       localStorage.removeItem(DRAFT_KEY);

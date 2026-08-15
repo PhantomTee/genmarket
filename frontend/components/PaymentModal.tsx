@@ -173,6 +173,20 @@ export default function PaymentModal({
         throw new Error('NEXT_PUBLIC_BACKEND_URL is not configured');
       }
 
+      // Obtain nonce and sign it with the buyer's wallet
+      const nonceRes = await fetch(
+        `${backendUrl}/api/auth/nonce?address=${encodeURIComponent(address)}&action=confirm-purchase`
+      );
+      if (!nonceRes.ok) throw new Error('Failed to obtain auth nonce');
+      const { message: authMessage } = await nonceRes.json();
+
+      const eth = (window as any).ethereum;
+      if (!eth) throw new Error('No Ethereum provider found');
+      const signature: string = await eth.request({
+        method: 'personal_sign',
+        params: [authMessage, address],
+      });
+
       const res = await fetch(`${backendUrl}/api/payments/confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -181,6 +195,8 @@ export default function PaymentModal({
           onchain_listing_id: onchainListingId,
           escrow_id: savedEscrowId,
           buyer_address: address,
+          signature,
+          auth_message: authMessage,
         }),
       });
 

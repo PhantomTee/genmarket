@@ -10,10 +10,10 @@ Live: **[genmarketplace.vercel.app](https://genmarketplace.vercel.app)**
 
 GenMarket is a peer-to-peer marketplace where developers can sell their GenLayer intelligent contract source code. Every listing is:
 
-- **Encrypted** — source code is encrypted client-side before upload; the backend never sees plaintext
-- **Stored on IPFS** — via Pinata, permanent and decentralized
-- **AI-evaluated** — the JudgeContract runs multi-validator LLM consensus to score code quality before listing goes live
-- **Trustlessly paid** — native GEN token is locked in a smart contract escrow; seller receives funds only when the buyer confirms delivery
+- **Encrypted server-side** — full source is encrypted with NaCl secretbox on the backend; buyers see only a public code preview until they purchase
+- **Stored on IPFS** — via Pinata; permanent and decentralized (ciphertext only)
+- **AI-evaluable** — an optional AI Judge (JudgeContract) lets buyers request an advisory quality score before purchasing
+- **Trustlessly paid** — native GEN token is locked in a smart contract escrow; source is only delivered after the escrow is confirmed released on-chain
 
 ---
 
@@ -22,16 +22,16 @@ GenMarket is a peer-to-peer marketplace where developers can sell their GenLayer
 ```
 genmarket/
 ├── contracts/
-│   ├── Marketplace.py       GenLayer intelligent contract — listings, escrow, reputation
-│   └── JudgeContract.py     Intelligent contract — LLM multi-validator code evaluation
+│   ├── Marketplace.py       GenLayer deterministic contract — listings, escrow, reputation
+│   └── JudgeContract.py     GenLayer intelligent contract — LLM multi-validator code evaluation
 ├── backend/                 Node.js + Express + TypeScript
-│   ├── src/routes/          REST API (listings, payments, judge, IPFS)
-│   ├── src/services/        GenLayer RPC, encryption, IPFS helpers
+│   ├── src/routes/          REST API (auth, listings, payments, contracts, purchases, stats)
+│   ├── src/services/        GenLayer RPC, encryption, IPFS, wallet-signature auth
 │   └── src/db/schema.ts     PostgreSQL schema (Supabase) — listings + purchases
 └── frontend/                Next.js 15 App Router
     ├── app/                 Pages (browse, sell, listing, dashboard, editor)
-    ├── components/          PaymentModal, ListingClient, Toast, etc.
-    └── lib/                 genlayer.ts, wallet-context, lint, normalize
+    ├── components/          PaymentModal, ListingCard, ListingClient, Navbar, Toast
+    └── lib/                 genlayer.ts, wallet-context, encryption, lint, normalize
 ```
 
 **Chain:** GenLayer Studionet — Chain ID `61999`
@@ -52,16 +52,32 @@ Handles all listings and escrow logic on-chain.
 | `refund(escrow_id)` | Return GEN to buyer; re-activates listing |
 | `vote_seller(escrow_id, upvote)` | Submit seller reputation vote after purchase |
 | `remove_listing(listing_id)` | Seller or owner removes a listing |
-| `get_all_listings_json()` | All active listings as JSON |
-| `get_listing_json(listing_id)` | Single listing |
+| `get_listing_count()` | Number of listings ever created |
+| `get_listing_json(listing_id)` | Single listing as JSON |
 | `get_escrow_json(escrow_id)` | Escrow state (buyer, amount, status) |
 | `get_seller_reputation_json(seller_hex)` | Seller score |
 
 **Escrow design:** `escrow_id === listing_id`. One active escrow per listing; can be reused after refund.
 
+**ID model:** Each listing has two IDs. The DB UUID (`listing_id`) is an internal identifier generated at upload time. The on-chain integer (`onchain_listing_id`, e.g. `"0"`) is set after the `create_listing` transaction confirms. The backend maps between them and never passes a UUID to GenLayer.
+
 ### `JudgeContract.py` (Intelligent)
 
-Uses GenLayer's LLM multi-validator consensus to evaluate contract code quality before listing goes live. Returns a structured JSON verdict with a score and reasoning.
+Uses GenLayer's LLM multi-validator consensus to evaluate the **public code preview** (not the encrypted full source). Returns a structured JSON verdict with a score and reasoning. The evaluation is advisory — sellers can opt in before listing, buyers can request it to aid purchasing decisions.
+
+---
+
+## Encryption Model
+
+Full source code is never stored or transmitted in plaintext. The backend:
+
+1. Generates a random NaCl secretbox key per listing
+2. Encrypts the full source with that key
+3. Uploads the **ciphertext** to IPFS
+4. Wraps the per-listing key with AES-256-GCM using `MASTER_KEY`
+5. Stores the wrapped key in PostgreSQL
+
+Decryption only happens inside the backend process at delivery time. The `MASTER_KEY` environment variable stays exclusively on the backend — never in the frontend or database.
 
 ---
 
@@ -70,24 +86,47 @@ Uses GenLayer's LLM multi-validator consensus to evaluate contract code quality 
 ```
 Seller                          Buyer                          Backend
   │                               │                               │
-  ├─ Encrypt source (NaCl)        │                               │
-  ├─ Upload to IPFS               │                               │
-  ├─ POST /api/listings (store)   │                               │
-  ├─ Judge evaluation (LLM)       │                               │
-  ├─ create_listing() on-chain ───┤                               │
+  ├─ Upload full source ──────────────────────────────────────►  │
+  │                                                   encrypt    │
+  │                                                   IPFS pin   │
+  │  ◄── listing_id (UUID) ────────────────────────────────────  │
+  ├─ create_listing() on-chain                                    │
+  ├─ POST /api/listings/:id/chain-id (signed) ─────────────────► │
   │                               │                               │
   │                    buy(id) on-chain (GEN locked)              │
   │                    confirm_purchase(id) on-chain              │
-  │                    ├─ emit_transfer → seller receives GEN      │
   │                    ├─ escrow status: released                  │
-  │                    └─ POST /api/payments/confirm ────────────►│
+  │                    │                                          │
+  │                    ├─ GET /api/auth/nonce ─────────────────► │
+  │                    │  ◄── nonce message ──────────────────── │
+  │                    ├─ personal_sign(nonce) [MetaMask]         │
+  │                    ├─ POST /api/payments/confirm (signed) ──► │
+  │                               │            verify signature   │
   │                               │            verify escrow      │
-  │                               │◄── source code ───────────────┤
-  │                               │                               │
+  │                               │            decrypt source     │
+  │                               │◄── source code ──────────── │
   │                    vote_seller() (optional)                   │
 ```
 
-**Security guarantee:** Backend decrypts and delivers source code **only** when `escrow.status === "released"` on-chain — meaning the seller has already received payment.
+**Security guarantee:** Backend decrypts and delivers source only when:
+1. `escrow.status === "released"` on-chain (seller already received GEN)
+2. The caller provides a valid `personal_sign` over a one-time nonce tied to their wallet address
+
+---
+
+## Authentication
+
+Sensitive routes require a wallet-signed nonce:
+
+1. `GET /api/auth/nonce?address=0x...&action=<action>` — returns a one-time message
+2. Client calls `personal_sign(message, address)` via MetaMask
+3. Signed request is sent with `{ signature, auth_message }` in the request body
+4. Backend verifies with viem `recoverMessageAddress`; nonce expires after 5 minutes and is single-use
+
+| Route | Auth required |
+|---|---|
+| `POST /api/payments/confirm` | Buyer must sign (`action=confirm-purchase`) |
+| `POST /api/listings/:id/chain-id` | Seller should sign (`action=link-listing`) |
 
 ---
 
@@ -95,12 +134,15 @@ Seller                          Buyer                          Backend
 
 | Property | Implementation |
 |---|---|
-| Source never exposed pre-sale | NaCl secretbox encryption before upload; IPFS stores ciphertext only |
-| Per-listing key isolation | Each listing has a unique encryption key, wrapped with `ENCRYPTION_MASTER_KEY` |
-| Seller paid before source delivered | Backend checks `escrow.status === "released"` — not just "locked" |
-| Buyer identity verified | `escrow.buyer` address matched against request before decryption |
-| No server-side plaintext | Source decrypted on backend for delivery but never written to disk or DB |
-| Reputation can't be gamed | Vote requires `escrow.status === "released"` — buyer must have actually paid and confirmed |
+| Source never exposed pre-sale | NaCl secretbox encryption; IPFS stores ciphertext only |
+| Per-listing key isolation | Unique key per listing, wrapped with `MASTER_KEY` (AES-256-GCM) |
+| Seller paid before source delivered | Backend checks `escrow.status === "released"` on-chain |
+| Buyer identity verified on-chain | `escrow.buyer` address matched before decryption |
+| Buyer wallet signature required | `personal_sign` nonce-auth on `/api/payments/confirm` |
+| No server-side plaintext persistence | Source decrypted in memory at delivery; never written to DB |
+| Reputation can't be gamed | Vote requires `escrow.status === "released"` — buyer must have confirmed |
+| Preview ≠ full source enforced | Backend rejects uploads where `previewCode === fullSourceCode` |
+| AI Judge sees only preview | JudgeContract receives the public preview, never the encrypted full source |
 
 ---
 
@@ -138,17 +180,15 @@ cp .env.example frontend/.env.local
 |---|---|---|
 | `GENLAYER_RPC_URL` | backend | GenLayer Studionet RPC |
 | `MARKETPLACE_CONTRACT_ADDRESS` | backend | Deployed Marketplace.py address |
-| `JUDGE_CONTRACT_ADDRESS` | backend | Deployed JudgeContract.py address |
-| `MASTER_KEY` | backend | 32-byte base64 master encryption key |
+| `MASTER_KEY` | backend | Base64-encoded 32-byte master encryption key |
 | `DATABASE_URL` | backend | Supabase connection string (port 6543 for pooler) |
-| `PINATA_API_KEY` / `PINATA_SECRET_API_KEY` | backend | Pinata IPFS credentials |
+| `PINATA_JWT` | backend | Pinata IPFS JWT credential |
 | `NEXT_PUBLIC_BACKEND_URL` | frontend | Backend API base URL |
-| `NEXT_PUBLIC_MARKETPLACE_CONTRACT_ADDRESS` | frontend | Same Marketplace address (public) |
-| `NEXT_PUBLIC_GENLAYER_RPC_URL` | frontend | GenLayer RPC for frontend reads |
+| `NEXT_PUBLIC_MARKETPLACE_CONTRACT_ADDRESS` | frontend | Marketplace address (for on-chain reads) |
+| `NEXT_PUBLIC_JUDGE_CONTRACT_ADDRESS` | frontend | JudgeContract address |
 
-Generate keys:
+Generate a master key:
 ```bash
-# MASTER_KEY
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
@@ -236,9 +276,10 @@ create table if not exists public.purchases (
 ## Tech Stack
 
 - **Frontend:** Next.js 15, TypeScript, Tailwind CSS, Monaco Editor, `@monaco-editor/react`
-- **Backend:** Node.js, Express, TypeScript, `node-postgres`
+- **Backend:** Node.js, Express, TypeScript, `node-postgres`, `viem`
 - **Contracts:** Python on GenLayer Studionet (`genlayer` SDK)
 - **Wallet:** MetaMask + `genlayer-js` SDK
 - **Storage:** Pinata IPFS
 - **Database:** Supabase (PostgreSQL)
 - **Encryption:** NaCl secretbox (tweetnacl) + AES-256-GCM master key wrapping
+- **Auth:** Wallet-signature nonce auth via `personal_sign` + viem `recoverMessageAddress`

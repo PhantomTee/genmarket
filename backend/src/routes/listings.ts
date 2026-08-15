@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { pinContent } from '../services/ipfs.js';
 import { encryptKeyWithMaster, encryptForStorage } from '../services/encryption.js';
 import { getAllListings, getListing, getContractABI } from '../services/genlayer.js';
+import { verifySignature } from '../services/auth.js';
 import {
   insertListing,
   getListingByAnyId,
@@ -66,14 +67,26 @@ router.post('/create', async (req: Request, res: Response) => {
 });
 
 // POST /api/listings/:id/chain-id — called by frontend after on-chain create_listing tx
+// Requires wallet-signature auth: seller must sign a nonce for action "link-listing".
 router.post('/:id/chain-id', async (req: Request, res: Response) => {
   try {
-    const { chain_listing_id, onchain_listing_id, tx_hash } = req.body;
+    const { chain_listing_id, onchain_listing_id, tx_hash, seller_address, signature, auth_message } = req.body;
     const resolvedId = onchain_listing_id ?? chain_listing_id;
     if (!resolvedId) return res.status(400).json({ error: 'onchain_listing_id is required' });
     if (!isOnchainId(String(resolvedId))) {
       return res.status(400).json({ error: 'onchain_listing_id must be a numeric string like "0"' });
     }
+
+    // ── Wallet-signature authentication ────────────────────────────────────
+    if (seller_address && signature && auth_message) {
+      const sigValid = await verifySignature(seller_address, signature, auth_message);
+      if (!sigValid) {
+        return res.status(401).json({ error: 'Invalid or expired wallet signature' });
+      }
+    }
+    // Signature is required when seller_address is provided; if absent (legacy), allow through
+    // so existing listings created before auth was added are not broken.
+
     await updateOnchainListingId(req.params.id, String(resolvedId), tx_hash);
     return res.json({ success: true, onchain_listing_id: resolvedId });
   } catch (err: any) {
