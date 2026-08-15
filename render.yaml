@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: genmarket-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    envVars:
+      - key: PORT
+        value: 4000
+      - key: NODE_ENV
+        value: production
+      - key: GENLAYER_RPC_URL
+        sync: false
+      - key: MARKETPLACE_CONTRACT_ADDRESS
+        sync: false
+      - key: MASTER_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: PINATA_JWT
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
