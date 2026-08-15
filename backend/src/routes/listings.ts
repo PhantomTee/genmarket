@@ -12,13 +12,15 @@ import {
 
 const router = Router();
 
+/** Returns true only for valid on-chain listing ids like "0", "1", "2". */
+function isOnchainId(value: string): boolean {
+  return /^[0-9]+$/.test(value);
+}
 
 // POST /api/listings/create
-// Backend owns encryption + IPFS upload.
-// Frontend sends plaintext fullSourceCode and public previewCode.
 router.post('/create', async (req: Request, res: Response) => {
   try {
-    const { title, description, price, category, demoContractAddress, fullSourceCode, previewCode, sellerAddress } = req.body;
+    const { title, description, price, category, demoContractAddress, fullSourceCode, previewCode } = req.body;
 
     if (!title || !description || !price || !category) {
       return res.status(400).json({ error: 'Missing required fields: title, description, price, category' });
@@ -32,9 +34,6 @@ router.post('/create', async (req: Request, res: Response) => {
     if (previewCode.trim() === fullSourceCode.trim()) {
       return res.status(400).json({ error: 'previewCode cannot be identical to fullSourceCode' });
     }
-    if (!sellerAddress || typeof sellerAddress !== 'string' || !sellerAddress.trim()) {
-      return res.status(400).json({ error: 'sellerAddress (connected wallet address) is required' });
-    }
 
     const listing_id = uuidv4();
 
@@ -46,7 +45,7 @@ router.post('/create', async (req: Request, res: Response) => {
     await insertListing({
       listing_id,
       ipfs_cid,
-      seller_pubkey: sellerAddress.toLowerCase(),
+      seller_pubkey: '',
       encryption_key: wrappedKey,
       created_at: Date.now(),
       preview_code: previewCode,
@@ -72,6 +71,9 @@ router.post('/:id/chain-id', async (req: Request, res: Response) => {
     const { chain_listing_id, onchain_listing_id, tx_hash } = req.body;
     const resolvedId = onchain_listing_id ?? chain_listing_id;
     if (!resolvedId) return res.status(400).json({ error: 'onchain_listing_id is required' });
+    if (!isOnchainId(String(resolvedId))) {
+      return res.status(400).json({ error: 'onchain_listing_id must be a numeric string like "0"' });
+    }
     await updateOnchainListingId(req.params.id, String(resolvedId), tx_hash);
     return res.json({ success: true, onchain_listing_id: resolvedId });
   } catch (err: any) {
@@ -79,77 +81,14 @@ router.post('/:id/chain-id', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/listings?seller=0x... — returns listings for a seller from the DB
-// This is used by the dashboard so new listings appear immediately, even before
-// on-chain finalization. Falls back to chain data once onchain_listing_id is set.
-router.get('/', async (req: Request, res: Response) => {
+// GET /api/listings
+router.get('/', async (_req: Request, res: Response) => {
   try {
-    // If ?seller= is provided, query the DB by seller address for instant dashboard visibility
-    const sellerParam = req.query.seller as string | undefined;
-
-    if (sellerParam && sellerParam.trim()) {
-      const { getListingsBySellerFromDb } = await import('../db/schema.js');
-      const dbRows = await getListingsBySellerFromDb(sellerParam.trim().toLowerCase());
-
-      // For rows that have an onchain_listing_id, enrich with chain data
-      const enriched = await Promise.all(
-        dbRows.map(async (row: any) => {
-          if (row.onchain_listing_id) {
-            try {
-              const chainData = await getListing(row.onchain_listing_id);
-              return {
-                ...chainData,
-                id: row.listing_id,
-                listing_id: row.listing_id,
-                onchain_listing_id: row.onchain_listing_id,
-                preview_code: (chainData as any).preview_code || row.preview_code || '',
-                source_hash: (chainData as any).source_hash || row.source_hash || '',
-              };
-            } catch {
-              // Chain read failed — return DB-only data with pending status
-            }
-          }
-          // Not yet on-chain — return pending placeholder so seller sees it immediately
-          return {
-            id: row.listing_id,
-            listing_id: row.listing_id,
-            onchain_listing_id: null,
-            seller: row.seller_pubkey,
-            title: row.preview_code ? '(Pending confirmation…)' : '(Draft)',
-            description: '',
-            price: 0,
-            category: '',
-            demo_contract_address: '',
-            ipfs_cid: row.ipfs_cid,
-            status: 'pending_onchain',
-            preview_code: row.preview_code || '',
-            source_hash: row.source_hash || '',
-            seller_upvotes: '0',
-            seller_downvotes: '0',
-            seller_score: 'none',
-          };
-        })
-      );
-
-      return res.json(enriched);
-    }
-
-    // Default: return all active on-chain listings (used by Browse/Home)
     const listings = await getAllListings();
-
-    const safeListings = Array.isArray(listings) ? listings : [];
-
-    const enriched = safeListings.map((l) => ({
-      ...l,
-      onchain_listing_id: (l as any).onchain_listing_id || l.id,
-    }));
-
+    const enriched = listings.map((l) => ({ ...l, onchain_listing_id: l.id }));
     return res.json(enriched);
   } catch (err: any) {
-    console.error('GET /api/listings failed:', err.message);
-
-    // Important: frontend expects an array. Do not return an error object here.
-    return res.json([]);
+    return res.status(500).json({ error: 'Failed to load listings', details: err.message });
   }
 });
 
@@ -165,70 +104,55 @@ router.get('/abi', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/listings/:id — accepts DB UUID or on-chain integer id
+// GET /api/listings/:id — accepts DB UUID or numeric on-chain id
 router.get('/:id', async (req: Request, res: Response) => {
   const rawId = req.params.id;
   console.log('GET /api/listings/:id', rawId);
-
   try {
+    // 1. Look up DB row by UUID or onchain_listing_id
     const dbRow = await getListingByAnyId(rawId);
 
-    // Case 1: DB UUID or DB row exists
     if (dbRow) {
-      const chainId = dbRow.onchain_listing_id || dbRow.chain_listing_id || null;
+      // 2a. DB row found — resolve the numeric on-chain id
+      const chainId = isOnchainId(dbRow.onchain_listing_id ?? '')
+        ? dbRow.onchain_listing_id!
+        : await (async () => {
+            // onchain_listing_id missing or invalid — scan by ipfs_cid
+            const all = await getAllListings();
+            const match = all.find((l) => l.ipfs_cid === dbRow.ipfs_cid);
+            if (match) {
+              await updateOnchainListingId(dbRow.listing_id, match.id);
+              return match.id;
+            }
+            return null;
+          })();
 
-      // If DB row is not linked to on-chain yet, return DB-safe data.
-      // Do NOT call GenLayer with a UUID.
       if (!chainId) {
-        return res.json({
-          id: dbRow.listing_id,
-          listing_id: dbRow.listing_id,
-          onchain_listing_id: null,
-          ipfs_cid: dbRow.ipfs_cid,
-          preview_code: dbRow.preview_code || '',
-          source_hash: dbRow.source_hash || '',
-          status: 'pending_onchain',
-          seller_upvotes: '0',
-          seller_downvotes: '0',
-          seller_score: 'none',
-        });
+        return res.status(404).json({ error: 'Listing not yet confirmed on-chain' });
       }
 
-      const listing = await getListing(chainId);
-
+      const onchain = await getListing(chainId);
+      console.log('Found listing db=%s onchain_id=%s', dbRow.listing_id, chainId);
       return res.json({
-        ...listing,
-        id: dbRow.listing_id,
-        listing_id: dbRow.listing_id,
+        ...onchain,
         onchain_listing_id: chainId,
-        onchain_id: chainId,
-        ipfs_cid: dbRow.ipfs_cid || listing.ipfs_cid,
-        preview_code: (listing as any).preview_code || dbRow.preview_code || '',
-        source_hash: (listing as any).source_hash || dbRow.source_hash || '',
-        create_tx_hash: dbRow.create_tx_hash || null,
+        ipfs_cid:     dbRow.ipfs_cid     ?? onchain.ipfs_cid,
+        preview_code: (onchain as any).preview_code || dbRow.preview_code || '',
+        source_hash:  (onchain as any).source_hash  || dbRow.source_hash  || '',
       });
     }
 
-    // Case 2: No DB row, but rawId is numeric, so it may be an on-chain listing id
-    if (/^[0-9]+$/.test(rawId)) {
-      const listing = await getListing(rawId);
-
-      return res.json({
-        ...listing,
-        id: listing.id,
-        onchain_listing_id: listing.id,
-        onchain_id: listing.id,
-      });
+    // 2b. Not in DB — only proceed if rawId is a numeric on-chain id
+    if (!isOnchainId(rawId)) {
+      return res.status(404).json({ error: 'Listing not found' });
     }
 
-    // Case 3: UUID not found in DB
-    return res.status(404).json({ error: 'Listing not found' });
+    const onchain = await getListing(rawId);
+    console.log('Found on-chain listing id=%s', rawId);
+    return res.json({ ...onchain, onchain_listing_id: rawId });
   } catch (err: any) {
     console.error('GET /api/listings/:id error', rawId, err.message);
-    return res.status(500).json({
-      error: 'Failed to load listing',
-      details: err.message,
-    });
+    return res.status(500).json({ error: 'Failed to load listing', details: err.message });
   }
 });
 
