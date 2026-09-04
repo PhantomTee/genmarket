@@ -67,7 +67,8 @@ router.post('/create', async (req: Request, res: Response) => {
 });
 
 // POST /api/listings/:id/chain-id — called by frontend after on-chain create_listing tx
-// Requires wallet-signature auth: seller must sign a nonce for action "link-listing".
+// When seller_address is provided: requires wallet-signature auth AND verifies on-chain
+// seller ownership. Legacy calls without seller_address are still accepted.
 router.post('/:id/chain-id', async (req: Request, res: Response) => {
   try {
     const { chain_listing_id, onchain_listing_id, tx_hash, seller_address, signature, auth_message } = req.body;
@@ -77,15 +78,29 @@ router.post('/:id/chain-id', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'onchain_listing_id must be a numeric string like "0"' });
     }
 
-    // ── Wallet-signature authentication ────────────────────────────────────
-    if (seller_address && signature && auth_message) {
+    if (seller_address) {
+      // ── Require signature ─────────────────────────────────────────────────
+      if (!signature || !auth_message) {
+        return res.status(401).json({ error: 'seller_address provided but no wallet signature. Sign a nonce via GET /api/auth/nonce.' });
+      }
       const sigValid = await verifySignature(seller_address, signature, auth_message);
       if (!sigValid) {
         return res.status(401).json({ error: 'Invalid or expired wallet signature' });
       }
+
+      // ── Verify on-chain seller ownership ─────────────────────────────────
+      try {
+        const onchain = await getListing(String(resolvedId));
+        if (String(onchain.seller).toLowerCase() !== String(seller_address).toLowerCase()) {
+          return res.status(403).json({
+            error: `Seller mismatch: on-chain seller is ${onchain.seller}, got ${seller_address}`,
+          });
+        }
+      } catch (chainErr: any) {
+        // If we can't read the on-chain listing yet (tx still pending), log and proceed.
+        console.warn('chain-id: could not verify on-chain seller (tx may still be pending):', chainErr.message);
+      }
     }
-    // Signature is required when seller_address is provided; if absent (legacy), allow through
-    // so existing listings created before auth was added are not broken.
 
     await updateOnchainListingId(req.params.id, String(resolvedId), tx_hash);
     return res.json({ success: true, onchain_listing_id: resolvedId });

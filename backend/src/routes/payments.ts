@@ -1,10 +1,15 @@
 import crypto from 'crypto';
 import { Router, Request, Response } from 'express';
-import { getEscrow } from '../services/genlayer.js';
-import { getListingById, upsertPurchase, confirmPurchaseInDb, refundPurchaseInDb } from '../db/schema.js';
+import { getEscrow, getListing } from '../services/genlayer.js';
+import {
+  getListingByAnyId,
+  upsertPurchase,
+  confirmPurchaseInDb,
+  refundPurchaseInDb,
+} from '../db/schema.js';
 import { decryptKeyWithMaster, decryptFromStorage } from '../services/encryption.js';
 import { fetchFromIPFS } from '../services/ipfs.js';
-import { verifySignature, buildMessage } from '../services/auth.js';
+import { verifySignature } from '../services/auth.js';
 
 const router = Router();
 
@@ -19,7 +24,6 @@ router.post('/buy', async (req: Request, res: Response) => {
       });
     }
 
-    // Record the purchase in DB (non-blocking — don't fail if it errors)
     try {
       await upsertPurchase({
         listing_id,
@@ -34,21 +38,28 @@ router.post('/buy', async (req: Request, res: Response) => {
       console.warn('POST /buy DB upsert failed (non-fatal):', dbErr.message);
     }
 
-    return res.json({
-      escrow_id: String(escrow_id),
-      status: 'locked',
-    });
+    return res.json({ escrow_id: String(escrow_id), status: 'locked' });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });
 
 // POST /api/payments/confirm
-// Verifies escrow state on-chain, decrypts full source on the backend, and delivers it.
-// Requires a wallet-signed nonce (obtain via GET /api/auth/nonce?address=&action=confirm-purchase).
+// Full delivery gate:
+//   1. Wallet-signature auth (buyer signed a nonce via GET /api/auth/nonce)
+//   2. On-chain escrow must be 'released' (buyer already called confirm_purchase)
+//   3. escrow.listing_id must match dbRow.onchain_listing_id (binds escrow to DB record)
+//   4. on-chain source_hash must match DB source_hash (binds on-chain listing to encrypted file)
 router.post('/confirm', async (req: Request, res: Response) => {
   try {
-    const { listing_id, buyer_address, escrow_id, onchain_listing_id, signature, auth_message } = req.body;
+    const {
+      listing_id,
+      buyer_address,
+      escrow_id,
+      onchain_listing_id,
+      signature,
+      auth_message,
+    } = req.body;
 
     if (!listing_id || !buyer_address || !escrow_id) {
       return res.status(400).json({
@@ -56,7 +67,7 @@ router.post('/confirm', async (req: Request, res: Response) => {
       });
     }
 
-    // ── Wallet-signature authentication ────────────────────────────────────
+    // ── 1. Wallet-signature auth ──────────────────────────────────────────────
     if (!signature || !auth_message) {
       return res.status(401).json({
         error: 'Wallet signature required. Obtain a nonce via GET /api/auth/nonce and sign it.',
@@ -67,54 +78,71 @@ router.post('/confirm', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid or expired wallet signature' });
     }
 
-    // ── On-chain escrow verification (mandatory) ────────────────────────────
-    // The frontend calls confirm_purchase on-chain BEFORE hitting this endpoint.
-    // After that, the contract transitions the escrow: 'locked' → 'released'.
-    // We accept both states to cover the small race window.
+    // ── 2. On-chain escrow verification ──────────────────────────────────────
     const finalEscrowId = String(escrow_id);
     const escrow = await getEscrow(finalEscrowId);
 
     if (!escrow) {
       return res.status(404).json({ error: 'Escrow not found on-chain' });
     }
-
     if (String(escrow.buyer).toLowerCase() !== String(buyer_address).toLowerCase()) {
-      return res.status(403).json({
-        error: 'Address mismatch: caller is not the buyer on this escrow',
-      });
+      return res.status(403).json({ error: 'Address mismatch: caller is not the buyer on this escrow' });
     }
-
     if (escrow.status !== 'released') {
       return res.status(400).json({
-        error: `Source not available yet. Escrow status is '${escrow.status}'. Call confirm_purchase on-chain first to release payment to the seller.`,
+        error: `Source not available yet. Escrow status is '${escrow.status}'. Call confirm_purchase on-chain first.`,
       });
     }
 
-    const dbRow = await getListingById(String(listing_id));
+    // ── 3. Resolve DB row — accepts UUID or on-chain integer id ──────────────
+    // Try the supplied listing_id first; fall back to onchain_listing_id if needed.
+    const dbRow = await getListingByAnyId(String(listing_id))
+      ?? (onchain_listing_id ? await getListingByAnyId(String(onchain_listing_id)) : undefined);
 
     if (!dbRow) {
       return res.status(404).json({ error: 'Listing not found in database' });
     }
 
-    // Decrypt full source on the backend — key never leaves the server
+    // ── 4. Bind escrow → DB record via on-chain listing_id ───────────────────
+    // escrow.listing_id is the on-chain integer slot; it must match what we stored.
+    const resolvedOnchainId = dbRow.onchain_listing_id ?? onchain_listing_id;
+    if (resolvedOnchainId && String(escrow.listing_id) !== String(resolvedOnchainId)) {
+      return res.status(403).json({
+        error: `Escrow listing_id (${escrow.listing_id}) does not match DB record (${resolvedOnchainId}). Cannot deliver source.`,
+      });
+    }
+
+    // ── 5. Bind on-chain source_hash → DB source_hash ────────────────────────
+    // Fetching the on-chain listing proves the IPFS CID and source hash committed
+    // at listing time haven't been swapped in the DB.
+    if (resolvedOnchainId) {
+      try {
+        const onchain = await getListing(resolvedOnchainId);
+        const onchainHash = (onchain as any).source_hash;
+        if (onchainHash && dbRow.source_hash && onchainHash !== dbRow.source_hash) {
+          return res.status(403).json({
+            error: 'Source hash mismatch between on-chain record and database. Delivery refused.',
+          });
+        }
+      } catch {
+        // If the on-chain read fails, proceed — we still verify the decrypted hash below.
+      }
+    }
+
+    // ── 6. Decrypt and verify integrity ──────────────────────────────────────
     const keyBase64 = decryptKeyWithMaster(dbRow.encryption_key);
     const encryptedBase64 = await fetchFromIPFS(dbRow.ipfs_cid);
     const sourceCode = decryptFromStorage(encryptedBase64, keyBase64);
 
-    // Verify integrity
-    const verifiedHash = crypto
-      .createHash('sha256')
-      .update(sourceCode, 'utf8')
-      .digest('hex');
-
+    const verifiedHash = crypto.createHash('sha256').update(sourceCode, 'utf8').digest('hex');
     const sourceHash = dbRow.source_hash ?? verifiedHash;
     const hashMatch = dbRow.source_hash ? verifiedHash === dbRow.source_hash : null;
 
-    // Record confirmation in DB (non-blocking)
+    // ── 7. Persist confirmation ───────────────────────────────────────────────
     try {
       await upsertPurchase({
-        listing_id,
-        onchain_listing_id: onchain_listing_id ?? finalEscrowId,
+        listing_id: dbRow.listing_id,
+        onchain_listing_id: resolvedOnchainId ?? finalEscrowId,
         escrow_id: finalEscrowId,
         buyer_address,
         seller_address: dbRow.seller_pubkey || undefined,
@@ -160,10 +188,7 @@ router.post('/refund', async (req: Request, res: Response) => {
       console.warn('POST /refund DB update failed (non-fatal):', dbErr.message);
     }
 
-    return res.json({
-      escrow_id: String(escrow_id),
-      status: 'refunded',
-    });
+    return res.json({ escrow_id: String(escrow_id), status: 'refunded' });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
